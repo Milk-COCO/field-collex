@@ -303,14 +303,9 @@ where
         if !span.contains(&key) { return Err(OutOfSpan(tuple)) }
         // 计算目标索引并防越界
         let idx =
-            match
                 TryInto::<usize>::try_into(
                     (key - *span.start())/self.unit
-                )
-            {
-                Ok(idx) => idx,
-                Err(_) => return Err(OutOfSpan(tuple))
-            };
+                ).map_err(IntoError)?;
         
         // 扩容到目标索引
         self.resize_to_idx(idx);
@@ -319,7 +314,7 @@ where
         let len = items.len();
         
         
-        if let RawField::Thing(_) = items[idx] {return Err(OutOfSpan(tuple))};
+        if let RawField::Thing(_) = items[idx] {return Err(AlreadyExists(tuple))};
         
         let cell = FlagCell::new(tuple);
         let flag_ref = cell.flag_borrow();
