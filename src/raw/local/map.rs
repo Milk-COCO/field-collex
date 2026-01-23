@@ -124,15 +124,28 @@ pub enum RemoveRawFieldMapError<I> {
     AlreadyEmpty,
 }
 
-type InsertResult<T,I> = Result<(),(T, InsertRawFieldMapError<I>)>;
+type InsertResult<T,I> = Result<(),InsertRawFieldMapError<T,I>>;
 #[derive(Error, Debug)]
-pub enum InsertRawFieldMapError<I> {
-    #[error(transparent)]
-    IntoError(I),
-    #[error("Key超出了当前RawFieldMap的span范围")]
-    OutOfSpan,
-    #[error("Key对应块已存在元素")]
-    AlreadyExists
+pub enum InsertRawFieldMapError<T,I> {
+    /// 转换错误（携带失败的 T + 转换错误 I）
+    #[error("转换失败，插入的值：{0:?}，错误：{1:?}")]
+    IntoError(T, I),
+    /// Key超出span范围（携带失败的 T）
+    #[error("Key超出了当前RawFieldMap的span范围，插入的值：{0:?}")]
+    OutOfSpan(T),
+    /// Key已存在（携带失败的 T）
+    #[error("Key对应块已存在元素，插入的值：{0:?}")]
+    AlreadyExists(T),
+}
+
+impl<T,I> InsertRawFieldMapError<T,I>{
+    pub fn unwrap(self) -> T {
+        match self {
+            InsertRawFieldMapError::IntoError(v, _) => {v}
+            InsertRawFieldMapError::OutOfSpan(v) => {v}
+            InsertRawFieldMapError::AlreadyExists(v) => {v}
+        }
+    }
 }
 
 
@@ -287,7 +300,7 @@ where
         use InsertRawFieldMapError::*;
         let tuple = (key,value);
         let span = &self.span;
-        if !span.contains(&key) { return Err((tuple,OutOfSpan)); }
+        if !span.contains(&key) { return Err(OutOfSpan(tuple)) }
         // 计算目标索引并防越界
         let idx =
             match
@@ -296,7 +309,7 @@ where
                 )
             {
                 Ok(idx) => idx,
-                Err(_) => return Err((tuple, OutOfSpan))
+                Err(_) => return Err(OutOfSpan(tuple))
             };
         
         // 扩容到目标索引
@@ -306,7 +319,7 @@ where
         let len = items.len();
         
         
-        if let RawField::Thing(_) = items[idx] {return Err((tuple, AlreadyExists))};
+        if let RawField::Thing(_) = items[idx] {return Err(OutOfSpan(tuple))};
         
         let cell = FlagCell::new(tuple);
         let flag_ref = cell.flag_borrow();
