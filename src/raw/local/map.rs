@@ -271,6 +271,13 @@ where
         self.items.capacity()
     }
     
+    /// 判断对应块是非空
+    pub fn is_thing(&self, idx: usize) -> bool {
+        if idx<=self.items.len() {
+            matches!(self.items[idx], RawField::Thing(_))
+        } else { false }
+    }
+    
     /// 计算指定key对应的块索引，统一错误处理
     #[inline(always)]
     fn idx_of_key(&self, key: K) -> Result<usize, IE> {
