@@ -98,10 +98,10 @@ impl<T> RawField<T> {
     }
 }
 
-type FindResult<T,I> = Result<T, FindRawFieldError<I>>;
+type FindResult<T,I> = Result<T, FindRawFieldMapError<I>>;
 
 #[derive(Error, Debug)]
-pub enum FindRawFieldError<I> {
+pub enum FindRawFieldMapError<I> {
     #[error(transparent)]
     IntoError(I),
     #[error("发生借用冲突")]
@@ -114,19 +114,19 @@ pub enum FindRawFieldError<I> {
     Empty,
 }
 
-type RemoveResult<T,I> = Result<T, RemoveRawFieldError<I>>;
+type RemoveResult<T,I> = Result<T, RemoveRawFieldMapError<I>>;
 
 #[derive(Error, Debug)]
-pub enum RemoveRawFieldError<I> {
+pub enum RemoveRawFieldMapError<I> {
     #[error(transparent)]
     IntoError(I),
     #[error("指定的块已为空块")]
     AlreadyEmpty,
 }
 
-type InsertResult<T,I> = Result<(),(T, InsertRawFieldError<I>)>;
+type InsertResult<T,I> = Result<(),(T, InsertRawFieldMapError<I>)>;
 #[derive(Error, Debug)]
-pub enum InsertRawFieldError<I> {
+pub enum InsertRawFieldMapError<I> {
     #[error(transparent)]
     IntoError(I),
     #[error("Key超出了当前RawFieldMap的span范围")]
@@ -281,10 +281,10 @@ where
     
     /// 插入键值对
     ///
-    /// 插入失败会返回 `((key, value),InsertRawFieldError)`
+    /// 插入失败会返回 `((key, value),InsertRawFieldMapError)`
     pub fn insert(&mut self, key: K, value: V) -> InsertResult<(K,V), IE>
     {
-        use InsertRawFieldError::*;
+        use InsertRawFieldMapError::*;
         let tuple = (key,value);
         let span = &self.span;
         if !span.contains(&key) { return Err((tuple,OutOfSpan)); }
@@ -354,7 +354,7 @@ where
     /// 若指定块非空，返回内部值。
     pub fn remove(&mut self, idx: usize) -> RemoveResult<V, IE>
     {
-        use RemoveRawFieldError::*;
+        use RemoveRawFieldMapError::*;
         
         let items = &mut self.items;
         let len = items.len();
@@ -444,7 +444,7 @@ where
         lmt: impl FnOnce(usize,usize) -> bool,
         next: impl FnOnce(usize) -> usize,
     ) -> FindResult<Ref<'_, V>, IE> {
-        use FindRawFieldError::*;
+        use FindRawFieldMapError::*;
         let span = &self.span;
         if !span.contains(&target) { return Err(OutOfSpan); }
         let items = &self.items;
@@ -464,7 +464,7 @@ where
     }
     
     fn matcher_l(field: &RawField<(K, V)>) -> FindResult<Ref<'_, (K, V)>, IE> {
-        use FindRawFieldError::*;
+        use FindRawFieldMapError::*;
         Ok(match field {
             RawField::Thing(thing)
             => thing.try_borrow().ok_or(BorrowConflict)?,
@@ -479,7 +479,7 @@ where
     }
     
     fn matcher_r(field: &RawField<(K, V)>) -> FindResult<Ref<'_, (K, V)>, IE> {
-        use FindRawFieldError::*;
+        use FindRawFieldMapError::*;
         Ok(match field {
             RawField::Thing(thing)
             => thing.try_borrow().ok_or(BorrowConflict)?,
