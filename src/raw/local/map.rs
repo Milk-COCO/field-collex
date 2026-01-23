@@ -345,14 +345,16 @@ where
         
         let items = &mut self.items;
         
-        if let RawField::Thing(_) = items[idx] {return Err(AlreadyExists(tuple))};
-        
         // 扩容到目标索引
         self.resize_to_idx(idx);
+        
+        if let RawField::Thing(_) = items[idx] {return Err(AlreadyExists(tuple))};
+        
         
         let cell = FlagCell::new(tuple);
         let flag_ref = cell.flag_borrow();
         items[idx] = RawField::Thing(cell);
+        
         self.insert_update_prev_next(
             idx,
             flag_ref
