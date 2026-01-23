@@ -124,9 +124,9 @@ pub enum RemoveRawFieldMapError<I> {
     AlreadyEmpty,
 }
 
-type InsertResult<T,I> = Result<(),InsertRawFieldMapError<T,I>>;
+type TryInsertResult<T,I> = Result<(), TryInsertRawFieldMapError<T,I>>;
 #[derive(Error, Debug)]
-pub enum InsertRawFieldMapError<T,I> {
+pub enum TryInsertRawFieldMapError<T,I> {
     /// 转换错误（携带失败的 T + 转换错误 I）
     #[error("转换失败，插入的值：{0:?}，错误：{1:?}")]
     IntoError(T, I),
@@ -138,12 +138,12 @@ pub enum InsertRawFieldMapError<T,I> {
     AlreadyExists(T),
 }
 
-impl<T,I> InsertRawFieldMapError<T,I>{
+impl<T,I> TryInsertRawFieldMapError<T,I>{
     pub fn unwrap(self) -> T {
         match self {
-            InsertRawFieldMapError::IntoError(v, _) => {v}
-            InsertRawFieldMapError::OutOfSpan(v) => {v}
-            InsertRawFieldMapError::AlreadyExists(v) => {v}
+            TryInsertRawFieldMapError::IntoError(v, _) => {v}
+            TryInsertRawFieldMapError::OutOfSpan(v) => {v}
+            TryInsertRawFieldMapError::AlreadyExists(v) => {v}
         }
     }
 }
@@ -292,12 +292,12 @@ where
         }
     }
     
-    /// 插入键值对
+    /// 尝试插入键值对
     ///
     /// 插入失败会返回 `((key, value),InsertRawFieldMapError)`
-    pub fn insert(&mut self, key: K, value: V) -> InsertResult<(K,V), IE>
+    pub fn try_insert(&mut self, key: K, value: V) -> TryInsertResult<(K, V), IE>
     {
-        use InsertRawFieldMapError::*;
+        use TryInsertRawFieldMapError::*;
         let tuple = (key,value);
         let span = &self.span;
         if !span.contains(&key) { return Err(OutOfSpan(tuple)) }
