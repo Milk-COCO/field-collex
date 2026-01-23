@@ -294,7 +294,7 @@ where
     
     /// 尝试插入键值对
     ///
-    /// 插入失败会返回 `((key, value),InsertRawFieldMapError)`
+    /// 插入失败会返回 `TryInsertRawFieldMapError` ，使用 `unwrap` 方法得到传入值 `(key,value)`。
     pub fn try_insert(&mut self, key: K, value: V) -> TryInsertResult<(K, V), IE>
     {
         use TryInsertRawFieldMapError::*;
