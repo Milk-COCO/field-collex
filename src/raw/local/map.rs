@@ -292,6 +292,42 @@ where
         }
     }
     
+    // 辅助函数：执行插入/替换后的前后更新逻辑
+    fn insert_update_prev_next(
+        &mut self,
+        idx: usize,
+        flag_ref: FlagRef<(K, V)>,
+    ) {
+        let items = &mut self.items;
+        let len = items.len();
+        
+        // 向后更新
+        items[idx+1..len].iter_mut()
+            .take_while(|v| !matches!(v, RawField::Thing(_)) )
+            .for_each(|v| {
+                let old = mem::replace(v, RawField::Void);
+                let new = match old {
+                    RawField::Prev(next) | RawField::Among(_, next) => RawField::Among(flag_ref.clone(), next),
+                    RawField::Next(_) | RawField::Void => RawField::Next(flag_ref.clone()),
+                    _ => unreachable!()
+                };
+                let _ = mem::replace(v, new);
+            });
+        
+        // 向前更新
+        items[0..idx].iter_mut().rev()
+            .take_while(|v| !matches!(v, RawField::Thing(_)) )
+            .for_each(|v| {
+                let old = mem::replace(v, RawField::Void);
+                let new = match old {
+                    RawField::Next(prev) | RawField::Among(prev, _) => RawField::Among(prev, flag_ref.clone()),
+                    RawField::Prev(_) | RawField::Void => RawField::Prev(flag_ref.clone()),
+                    _ => unreachable!()
+                };
+                let _ = mem::replace(v, new);
+            });
+    }
+    
     /// 尝试插入键值对
     ///
     /// 插入失败会返回 `TryInsertRawFieldMapError` ，使用 `unwrap` 方法得到传入值 `(key,value)`。
@@ -307,52 +343,20 @@ where
                     (key - *span.start())/self.unit
                 ).map_err(IntoError)?;
         
-        // 扩容到目标索引
-        self.resize_to_idx(idx);
-        
         let items = &mut self.items;
-        let len = items.len();
-        
         
         if let RawField::Thing(_) = items[idx] {return Err(AlreadyExists(tuple))};
+        
+        // 扩容到目标索引
+        self.resize_to_idx(idx);
         
         let cell = FlagCell::new(tuple);
         let flag_ref = cell.flag_borrow();
         items[idx] = RawField::Thing(cell);
-        
-        // 向后更新
-        items[idx+1..len].iter_mut()
-            .take_while(|v| !matches!(v, RawField::Thing(_)) )
-            .for_each(|v| {
-                let old = mem::replace(v, RawField::Void);
-                let new = match old {
-                    RawField::Prev(next)
-                    | RawField::Among(_, next)
-                    => RawField::Among(flag_ref.clone(), next),
-                    RawField::Next(_)
-                    | RawField::Void
-                    => RawField::Next(flag_ref.clone()),
-                    _ => unreachable!()
-                };
-                let _ = mem::replace(v, new);
-            });
-        
-        // 向前更新
-        items[0..idx].iter_mut().rev()
-            .take_while(|v| !matches!(v, RawField::Thing(_)) )
-            .for_each(|v| {
-                let old = mem::replace(v, RawField::Void);
-                let new = match old {
-                    RawField::Next(prev)
-                    | RawField::Among(prev, _)
-                    => RawField::Among(prev, flag_ref.clone()),
-                    RawField::Prev(_)
-                    | RawField::Void
-                    => RawField::Prev(flag_ref.clone()),
-                    _ => unreachable!()
-                };
-                let _ = mem::replace(v, new);
-            });
+        self.insert_update_prev_next(
+            idx,
+            flag_ref
+        );
         Ok(())
     }
     
