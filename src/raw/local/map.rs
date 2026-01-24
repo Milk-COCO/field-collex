@@ -769,15 +769,14 @@ where
     /// - next: 索引跳转规则 | (当前索引) -> usize | 返回查找目标索引
     ///
     /// 因为查找是O(1)所以暂不使用迭代器
-    fn find_in<'s>(
-        &'s self,
+    fn find_in(
+        &self,
         target: K,
-        matcher: impl Fn(&'s Self,&'s RawField<K,V>) -> FindResult<(usize,K,Ref<'s, V>), IE>,
+        matcher: impl Fn(&Self, &RawField<K, V>) -> FindResult<(usize, K, FlagRef<V>), IE>,
         cmp: impl FnOnce(&K,&K) -> bool,
         lmt: impl FnOnce(usize,usize) -> bool,
         next: impl FnOnce(usize) -> usize,
-    ) -> FindResult<Ref<'s, V>, IE>
-    where K: 's , V: 's
+    ) -> FindResult<FlagRef<V>, IE>
     {
         use FindRawFieldMapError::*;
         
@@ -795,15 +794,14 @@ where
         })
     }
     
-    fn find_index_in<'s>(
-        &'s self,
+    fn find_index_in(
+        &self,
         target: K,
-        matcher: impl Fn(&'s Self,&'s RawField<K,V>) -> FindResult<(usize,K,Ref<'s, V>), IE>,
+        matcher: impl Fn(&Self, &RawField<K, V>) -> FindResult<(usize, K, FlagRef<V>), IE>,
         cmp: impl FnOnce(&K,&K) -> bool,
         lmt: impl FnOnce(usize,usize) -> bool,
         next: impl FnOnce(usize) -> usize,
     ) -> FindResult<usize, IE>
-    where K: 's , V: 's
     {
         use FindRawFieldMapError::*;
         let idx = self.find_checker(target)?;
@@ -819,16 +817,16 @@ where
         })
     }
     
-    fn matcher_l<'s>(this: &'s Self, field: &'s RawField<K, V>) -> FindResult<(usize,K,Ref<'s, V>), IE> {
+    fn matcher_l(this: &Self, field: &RawField<K, V>) -> FindResult<(usize,K,FlagRef<V>), IE> {
         use FindRawFieldMapError::*;
         Ok(match field {
             RawField::Thing(thing)
-            => (thing.0,thing.1,thing.2.try_borrow().ok_or(BorrowConflict)?),
+            =>  (thing.0,thing.1,thing.2.flag_borrow()),
             RawField::Prev(fount)
             | RawField::Among(fount, _)
             => {
                 let thing = this.items[fount.0].as_thing();
-                (thing.0,thing.1,thing.2.try_borrow().ok_or(BorrowConflict)?)
+                (thing.0,thing.1,thing.2.flag_borrow())
             }
             RawField::Next(_)
             => return Err(CannotFind),
@@ -837,18 +835,18 @@ where
         })
     }
     
-    fn matcher_r<'s>(this: &'s Self, field: &'s RawField<K, V>) -> FindResult<(usize,K,Ref<'s, V>), IE> {
+    fn matcher_r(this: &Self, field: &RawField<K, V>) -> FindResult<(usize,K,FlagRef<V>), IE> {
         use FindRawFieldMapError::*;
         Ok(match field {
             RawField::Thing(thing)
-            => (thing.0,thing.1,thing.2.try_borrow().ok_or(BorrowConflict)?),
+            =>  (thing.0,thing.1,thing.2.flag_borrow()),
             RawField::Prev(_)
             => return Err(CannotFind),
             RawField::Next(next)
             | RawField::Among(_, next)
             => {
                 let thing = this.items[next.0].as_thing();
-                (thing.0,thing.1,thing.2.try_borrow().ok_or(BorrowConflict)?)
+                (thing.0,thing.1,thing.2.flag_borrow())
             }
             RawField::Void
             => return Err(Empty),
@@ -857,7 +855,7 @@ where
     
     /// 找到最近的小于等于 target 的值
     ///
-    pub fn find_le(&self, target: K) -> FindResult<Ref<'_, V>, IE> {
+    pub fn find_le(&self, target: K) -> FindResult<FlagRef<V>, IE> {
         self.find_in(
             target,
             Self::matcher_l,
@@ -869,7 +867,7 @@ where
     
     /// 找到最近的小于 target 的值
     ///
-    pub fn find_lt(&self, target: K) -> FindResult<Ref<'_, V>, IE> {
+    pub fn find_lt(&self, target: K) -> FindResult<FlagRef<V>, IE> {
         self.find_in(
             target,
             Self::matcher_l,
@@ -881,7 +879,7 @@ where
     
     /// 找到最近的大于等于 target 的值
     ///
-    pub fn find_ge(&self, target: K) -> FindResult<Ref<'_, V>, IE> {
+    pub fn find_ge(&self, target: K) -> FindResult<FlagRef<V>, IE> {
         self.find_in(
             target,
             Self::matcher_r,
@@ -893,7 +891,7 @@ where
     
     /// 找到最近的大于 target 的值
     ///
-    pub fn find_gt(&self, target: K) -> FindResult<Ref<'_, V>, IE> {
+    pub fn find_gt(&self, target: K) -> FindResult<FlagRef<V>, IE> {
         self.find_in(
             target,
             Self::matcher_r,
