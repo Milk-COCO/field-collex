@@ -18,71 +18,99 @@ use thiserror::Error;
 ///
 /// Hint：外部 **never** 提取内部类型。随意获取引用可能导致触发panic，或导致Map无法正常工作。
 #[derive(Debug)]
-enum RawField<T> {
-    Thing(FlagCell<T>),
-    Prev (FlagRef<T>),
-    Among(FlagRef<T>, FlagRef<T>),
-    Next (FlagRef<T>),
+enum RawField<K, V>
+where K:Copy
+{
+    Thing((usize,K,FlagCell<V>)),
+    Prev ((usize,FlagRef<V>)),
+    Among((usize,FlagRef<V>), (usize, FlagRef<V>)),
+    Next ((usize,FlagRef<V>)),
     Void,
 }
 
-impl<T> RawField<T> {
+impl<K, V> RawField<K, V>
+where K:Copy
+{
     
-    pub fn as_thing(&self) -> &FlagCell<T> {
+    pub fn as_thing(&self) -> &(usize,K,FlagCell<V>) {
         match self {
-            Self::Thing(c) => c,
+            Self::Thing(t) => t,
             _ => panic!("Called `RawField::into_thing()` on a not `Thing` value`"),
         }
     }
     
-    pub fn into_thing(self) -> FlagCell<T> {
+    pub fn into_thing(self) -> FlagCell<V> {
         match self {
-            Self::Thing(c) => c,
+            Self::Thing((..,c)) => c,
             _ => panic!("Called `RawField::into_thing()` on a not `Thing` value`"),
         }
     }
     
-    pub fn partial_clone(&self) -> Option<RawField<T>> {
+    pub fn prev(tuple: (usize,FlagRef<V>) ) -> Self{
+        Self::Prev(tuple)
+    }
+    
+    pub fn next(tuple: (usize,FlagRef<V>) ) -> Self{
+        Self::Next(tuple)
+    }
+    
+    pub fn among(prev: (usize,FlagRef<V>), next:  (usize,FlagRef<V>)) -> Self{
+        Self::Among(prev,next)
+    }
+    
+    pub fn void() -> Self {
+        Self::Void
+    }
+    
+    pub fn partial_clone(&self) -> Option<RawField<K, V>> {
         match self {
-            RawField::Thing(_)
+            RawField::Thing(..)
             => None,
             RawField::Prev(prev)
-            => Some(RawField::Prev(prev.clone())),
+            => Some(Self::prev(prev.clone())),
             RawField::Among(prev, next)
-            => Some(RawField::Among(prev.clone(), next.clone())),
+            => Some(Self::among(prev.clone(), next.clone())),
             RawField::Next(next)
-            => Some(RawField::Next(next.clone())),
+            => Some(Self::next(next.clone())),
             RawField::Void
             => Some(RawField::Void),
         }
     }
     
+    pub fn prev_from(tuple: &(usize,K,FlagCell<V>)) -> Self{
+        Self::Prev((tuple.0,tuple.2.flag_borrow()))
+    }
     
-    pub fn borrow_prev_or_clone(&self) -> RawField<T> {
+    pub fn next_from(tuple: &(usize,K,FlagCell<V>)) -> Self{
+        Self::Next((tuple.0,tuple.2.flag_borrow()))
+    }
+    
+    
+    pub fn borrow_prev_or_clone(&self) -> RawField<K, V> {
         match self {
             RawField::Thing(thing)
-            => RawField::Prev(thing.flag_borrow()),
+            => Self::prev_from(thing),
             RawField::Prev(prev)
-            => RawField::Prev(prev.clone()),
+            => Self::prev(prev.clone()),
             RawField::Among(prev, next)
-            => RawField::Among(prev.clone(), next.clone()),
+            => Self::among(prev.clone(), next.clone()),
             RawField::Next(next)
-            => RawField::Next(next.clone()),
+            => Self::next(next.clone()),
             RawField::Void
             => RawField::Void,
         }
     }
     
-    pub fn borrow_next_or_clone(&self) -> RawField<T> {
+    pub fn borrow_next_or_clone(&self) -> RawField<K, V> {
         match self {
             RawField::Thing(thing)
-            => RawField::Next(thing.flag_borrow()),
+            => Self::next_from(thing),
             RawField::Prev(prev)
-            => RawField::Prev(prev.clone()),
+            => Self::prev(prev.clone()),
             RawField::Among(prev, next)
-            => RawField::Among(prev.clone(), next.clone()),
+            => Self::among(prev.clone(), next.clone()),
             RawField::Next(next)
-            => RawField::Next(next.clone()),
+            => Self::next(next.clone()),
             RawField::Void
             => RawField::Void,
         }
@@ -92,9 +120,9 @@ impl<T> RawField<T> {
     ///
     /// 若非Thing，或正在被借用，返回Err返还self
     #[allow(dead_code)]
-    pub fn try_unwrap(self) -> Result<T,Self> {
+    pub fn try_unwrap(self) -> Result<V,Self> {
         if let RawField::Thing(t) = self {
-            t.try_unwrap().map_err(|t| RawField::Thing(t))
+            t.2.try_unwrap().map_err(|cell| RawField::Thing((t.0,t.1,cell)))
         } else {
             Err(self)
         }
@@ -105,16 +133,16 @@ impl<T> RawField<T> {
     ///
     /// # Panics
     /// 若非Thing，或正在被借用，panic
-    pub fn unwrap(self) -> T {
+    pub fn unwrap(self) -> V {
         if let RawField::Thing(t) = self {
-            t.unwrap()
+            t.2.unwrap()
         } else {
             panic!("called `RawField::unwrap()` on a not `Thing` value")
         }
     }
 }
 
-impl<T> Clone for RawField<T> {
+impl<K: Copy,T> Clone for RawField<K,T> {
     /// 克隆内部引用
     /// 
     /// # Panics
@@ -124,11 +152,11 @@ impl<T> Clone for RawField<T> {
             RawField::Thing(_)
             => panic!("Called `RawField::clone()` on a `Thing` value"),
             RawField::Prev(prev)
-            => RawField::Prev(prev.clone()),
+            => Self::prev(prev.clone()),
             RawField::Among(prev, next)
-            => RawField::Among(prev.clone(), next.clone()),
+            => Self::among(prev.clone(), next.clone()),
             RawField::Next(next)
-            => RawField::Next(next.clone()),
+            => Self::next(next.clone()),
             RawField::Void
             => RawField::Void,
         }
@@ -256,7 +284,8 @@ where
 {
     span: Span<K>,
     unit: K,
-    items: Vec<RawField<(K, V)>>,
+    // (Thing所有权的索引，Thing的Key，Thing的引用或所有权)
+    items: Vec<RawField<K,V>>,
 }
 
 impl<K,V,IE> RawFieldMap<K,V>
@@ -361,11 +390,13 @@ where
         } else { false }
     }
     
+    /// 返回可变引用
+    ///
     /// 索引对应块是非空则返回Some，带边界检查
-    fn as_thing(&self, idx: usize) -> Option<&FlagCell<(K,V)>> {
+    fn as_thing_mut(&mut self, idx: usize) -> Option<&mut (usize, K, FlagCell<V>)> {
         if idx<=self.items.len() {
             match self.items[idx] {
-                RawField::Thing(ref v) => Some(v),
+                RawField::Thing(ref mut v) => Some(v),
                 _ => None
             }
         } else { None }
@@ -387,8 +418,8 @@ where
             };
             self.items.resize_with(
                 idx + 1,
-                // 防御性。上面已经确保不会是Thing了，但还是unwrap_or
-                || fill_field.partial_clone().unwrap_or(RawField::Void)
+                // 已确保不是Thing
+                || fill_field.clone()
             );
         }
     }
@@ -397,16 +428,16 @@ where
     fn try_insert_in(
         &mut self,
         idx: usize,
-        thing: (K, V),
+        key: K,
+        value: V,
     ) {
         // 扩容到目标索引
         self.resize_to_idx(idx);
         
         let items = &mut self.items;
         
-        let cell = FlagCell::new(thing);
-        let flag_ref = cell.flag_borrow();
-        items[idx] = RawField::Thing(cell);
+        let cell = FlagCell::new(value);
+        let fill_field_maker = || (idx, cell.flag_borrow());
         
         let len = items.len();
         
@@ -416,8 +447,8 @@ where
             .for_each(|v| {
                 let old = mem::replace(v, RawField::Void);
                 let new = match old {
-                    RawField::Prev(next) | RawField::Among(_, next) => RawField::Among(flag_ref.clone(), next),
-                    RawField::Next(_) | RawField::Void => RawField::Next(flag_ref.clone()),
+                    RawField::Prev(next) | RawField::Among(_, next) => RawField::Among(fill_field_maker(), next),
+                    RawField::Next(_) | RawField::Void => RawField::Next(fill_field_maker()),
                     _ => unreachable!()
                 };
                 let _ = mem::replace(v, new);
@@ -429,12 +460,14 @@ where
             .for_each(|v| {
                 let old = mem::replace(v, RawField::Void);
                 let new = match old {
-                    RawField::Next(prev) | RawField::Among(prev, _) => RawField::Among(prev, flag_ref.clone()),
-                    RawField::Prev(_) | RawField::Void => RawField::Prev(flag_ref.clone()),
+                    RawField::Next(prev) | RawField::Among(prev, _) => RawField::Among(prev, fill_field_maker()),
+                    RawField::Prev(_) | RawField::Void => RawField::Prev(fill_field_maker()),
                     _ => unreachable!()
                 };
                 let _ = mem::replace(v, new);
             });
+        
+        items[idx] = RawField::Thing((idx,key,cell));
     }
     
     /// 尝试插入键值对
@@ -443,21 +476,21 @@ where
     pub fn try_insert(&mut self, key: K, value: V) -> TryInsertResult<V, IE>
     {
         use TryInsertRawFieldMapError::*;
-        let tuple = (key,value);
         let span = &self.span;
-        if !span.contains(&key) { return Err(OutOfSpan(tuple.1)) }
+        if !span.contains(&key) { return Err(OutOfSpan(value)) }
         
         let idx = match self.idx_of_key(key){
             Ok(v) => {v}
             // 需要拿走所有权所以只能这么match
-            Err(e) => {return Err(IntoError(tuple.1,e));}
+            Err(e) => {return Err(IntoError(value,e));}
         };
         
-        if self.is_thing(idx) {return Err(AlreadyExists(tuple.1))};
+        if self.is_thing(idx) {return Err(AlreadyExists(value))};
         
         self.try_insert_in(
             idx,
-            tuple
+            key,
+            value
         );
         Ok(())
     }
@@ -471,27 +504,31 @@ where
     pub fn insert(&mut self, key: K, value: V) -> InsertResult<K, V, IE>
     {
         use InsertRawFieldMapError::*;
-        let tuple = (key,value);
         let span = &self.span;
-        if !span.contains(&key) { return Err(OutOfSpan(tuple.1)) }
+        if !span.contains(&key) { return Err(OutOfSpan(value)) }
         
         let idx = match self.idx_of_key(key){
             Ok(v) => {v}
             // 需要拿走所有权所以只能这么match
-            Err(e) => {return Err(IntoError(tuple.1,e));}
+            Err(e) => {return Err(IntoError(value,e));}
         };
         
-        if let Some(thing) = self.as_thing(idx){
+        if let Some(thing) = self.as_thing_mut(idx){
             // 已存在，则替换并返回其原键值
-            match thing.try_replace(tuple) {
-                Ok(v) => {Ok(Some(v))}
-                Err(v) => {Err(BorrowConflict(v.1))}
+            match thing.2.try_replace(value) {
+                Ok(v) => {
+                    let key_old = thing.1;
+                    thing.1 = key;
+                    Ok(Some((key_old,v)))
+                }
+                Err(v) => {Err(BorrowConflict(v))}
             }
         } else {
             // 同 try_insert
             self.try_insert_in(
                 idx,
-                tuple
+                key,
+                value
             );
             
             Ok(None)
@@ -510,12 +547,9 @@ where
         use ReplaceIndexRawFieldMapError::*;
         
         if let RawField::Thing(ref mut thing) = self.items[idx] {
-            match thing.try_replace((match thing.try_borrow(){
-                None => {return Err(BorrowConflict(value))}
-                Some(v) => {v}
-            }.0, value)) {
-                Ok(v) => {Ok(v.1)}
-                Err(v) => {Err(BorrowConflict(v.1))}
+            match thing.2.try_replace(value) {
+                Ok(v) => {Ok(v)}
+                Err(v) => {Err(BorrowConflict(v))}
             }
         } else {
             Err(EmptyField(value))
@@ -555,11 +589,11 @@ where
                     None
                 } else {
                     match &items[idx + 1] {
-                        RawField::Thing(cell) => Some(cell.flag_borrow()),
+                        RawField::Thing(thing) => Some((thing.0,thing.2.flag_borrow())),
                         RawField::Prev(_)
                         | RawField::Void => None,
                         RawField::Among(_, next)
-                        | RawField::Next(next) => Some(next.clone()),
+                        | RawField::Next(next) => Some((next.0,next.1.clone())),
                     }
                 };
             
@@ -568,11 +602,11 @@ where
                     None
                 } else {
                     match &items[idx - 1] {
-                        RawField::Thing(cell) => Some(cell.flag_borrow()),
+                        RawField::Thing(thing) => Some((thing.0,thing.2.flag_borrow())),
                         RawField::Next(_)
                         | RawField::Void => None,
                         RawField::Among(prev, _)
-                        | RawField::Prev(prev) => Some(prev.clone()),
+                        | RawField::Prev(prev) => Some((prev.0,prev.1.clone())),
                     }
                 };
             
@@ -611,7 +645,7 @@ where
                 });
             
             // 刚刚更新的过程中已确保不再存在任何自己的借用，直接unwrap！
-            Ok(old.unwrap().1)
+            Ok(old.unwrap())
         } else {
             Err(EmptyField)
         }
@@ -657,44 +691,49 @@ where
     /// - next: 索引跳转规则 | (当前索引) -> usize | 返回查找目标索引
     ///
     /// 因为查找是O(1)所以暂不使用迭代器
-    fn find_in(
-        &self,
+    fn find_in<'s>(
+        &'s self,
         target: K,
-        matcher: impl Fn(&RawField<(K, V)>) -> FindResult<Ref<'_, (K, V)>, IE>,
+        matcher: impl Fn(&'s Self,&'s RawField<K,V>) -> FindResult<(usize,K,Ref<'s, V>), IE>,
         cmp: impl FnOnce(&K,&K) -> bool,
         lmt: impl FnOnce(usize,usize) -> bool,
         next: impl FnOnce(usize) -> usize,
-    ) -> FindResult<Ref<'_, V>, IE> {
+    ) -> FindResult<Ref<'s, V>, IE>
+    where K: 's , V: 's
+    {
         use FindRawFieldMapError::*;
         
         let idx = self.find_checker(target)?;
         let items = &self.items;
         let len = items.len();
-        let current = matcher(&items[idx])?;
+        let current = matcher(self,&items[idx])?;
         
-        Ok(if cmp(&current.0, &target) {
-            Ref::map(current, |t| &t.1)
+        Ok(if cmp(&current.1, &target) {
+            current.2
         } else {
             if lmt(idx, len) { return Err(CannotFind); }
-            Ref::map(matcher(&items[next(idx)])?, |t| &t.1)
+            let next = matcher(self,&items[next(idx)])?;
+            next.2
         })
     }
     
-    fn find_index_in(
-        &self,
+    fn find_index_in<'s>(
+        &'s self,
         target: K,
-        matcher: impl Fn(&RawField<(K, V)>) -> FindResult<Ref<'_, (K, V)>, IE>,
+        matcher: impl Fn(&'s Self,&'s RawField<K,V>) -> FindResult<(usize,K,Ref<'s, V>), IE>,
         cmp: impl FnOnce(&K,&K) -> bool,
         lmt: impl FnOnce(usize,usize) -> bool,
         next: impl FnOnce(usize) -> usize,
-    ) -> FindResult<usize, IE> {
+    ) -> FindResult<usize, IE>
+    where K: 's , V: 's
+    {
         use FindRawFieldMapError::*;
         let idx = self.find_checker(target)?;
         let items = &self.items;
         let len = items.len();
-        let current = matcher(&items[idx])?;
+        let current = matcher(self,&items[idx])?;
         
-        Ok(if cmp(&current.0, &target) {
+        Ok(if cmp(&current.1, &target) {
             idx
         } else {
             if lmt(idx, len) { return Err(CannotFind); }
@@ -702,14 +741,17 @@ where
         })
     }
     
-    fn matcher_l(field: &RawField<(K, V)>) -> FindResult<Ref<'_, (K, V)>, IE> {
+    fn matcher_l<'s>(this: &'s Self, field: &'s RawField<K, V>) -> FindResult<(usize,K,Ref<'s, V>), IE> {
         use FindRawFieldMapError::*;
         Ok(match field {
             RawField::Thing(thing)
-            => thing.try_borrow().ok_or(BorrowConflict)?,
+            => (thing.0,thing.1,thing.2.try_borrow().ok_or(BorrowConflict)?),
             RawField::Prev(fount)
             | RawField::Among(fount, _)
-            => fount.try_borrow().into_option().ok_or(BorrowConflict)?,
+            => {
+                let thing = this.items[fount.0].as_thing();
+                (thing.0,thing.1,thing.2.try_borrow().ok_or(BorrowConflict)?)
+            }
             RawField::Next(_)
             => return Err(CannotFind),
             RawField::Void
@@ -717,16 +759,19 @@ where
         })
     }
     
-    fn matcher_r(field: &RawField<(K, V)>) -> FindResult<Ref<'_, (K, V)>, IE> {
+    fn matcher_r<'s>(this: &'s Self, field: &'s RawField<K, V>) -> FindResult<(usize,K,Ref<'s, V>), IE> {
         use FindRawFieldMapError::*;
         Ok(match field {
             RawField::Thing(thing)
-            => thing.try_borrow().ok_or(BorrowConflict)?,
+            => (thing.0,thing.1,thing.2.try_borrow().ok_or(BorrowConflict)?),
             RawField::Prev(_)
             => return Err(CannotFind),
             RawField::Next(next)
             | RawField::Among(_, next)
-            => next.try_borrow().into_option().ok_or(BorrowConflict)?,
+            => {
+                let thing = this.items[next.0].as_thing();
+                (thing.0,thing.1,thing.2.try_borrow().ok_or(BorrowConflict)?)
+            }
             RawField::Void
             => return Err(Empty),
         })
@@ -772,6 +817,55 @@ where
     ///
     pub fn find_gt(&self, target: K) -> FindResult<Ref<'_, V>, IE> {
         self.find_in(
+            target,
+            Self::matcher_r,
+            |the,tgt| *the > *tgt,
+            |idx,len| idx == len-1,
+            |idx| idx+1
+        )
+    }
+    
+    
+    /// 找到最近的小于等于 target 的值的索引
+    ///
+    pub fn find_index_le(&self, target: K) -> FindResult<usize, IE> {
+        self.find_index_in(
+            target,
+            Self::matcher_l,
+            |the, tgt| *the <= *tgt,
+            |idx,_| idx == 0,
+            |idx| idx-1
+        )
+    }
+    
+    /// 找到最近的小于 target 的值的索引
+    ///
+    pub fn find_index_lt(&self, target: K) -> FindResult<usize, IE> {
+        self.find_index_in(
+            target,
+            Self::matcher_l,
+            |the, tgt| *the < *tgt,
+            |idx,_| idx == 0,
+            |idx| idx-1
+        )
+    }
+    
+    /// 找到最近的大于等于 target 的值的索引
+    ///
+    pub fn find_index_ge(&self, target: K) -> FindResult<usize, IE> {
+        self.find_index_in(
+            target,
+            Self::matcher_r,
+            |the,tgt| *the >= *tgt,
+            |idx,len| idx == len-1,
+            |idx| idx+1
+        )
+    }
+    
+    /// 找到最近的大于 target 的值的索引
+    ///
+    pub fn find_index_gt(&self, target: K) -> FindResult<usize, IE> {
+        self.find_index_in(
             target,
             Self::matcher_r,
             |the,tgt| *the > *tgt,
