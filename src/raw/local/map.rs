@@ -401,6 +401,27 @@ where
         }
     }
     
+    /// 通过索引得到块键
+    ///
+    /// 若块不为空，返回Some
+    pub fn get_key(&self,idx: usize) -> Option<K> {
+        let thing = self.as_thing(idx)?;
+        Some(thing.1)
+    }
+    
+    /// 通过索引得到块键
+    ///
+    /// 若块不为空，返回Some
+    ///
+    /// # Panics
+    /// 越界访问时panic
+    pub fn unchecked_get_key(&self,idx: usize) -> Option<K> {
+        match self.items[idx] {
+            RawField::Thing(ref t) => Some(t.1),
+            _ => None
+        }
+    }
+    
     /// 返回最大块数量
     ///
     /// 若Span是无限区间，返回Ok(None) <br>
