@@ -358,7 +358,7 @@ where
     
     /// 通过索引得到引用
     ///
-    /// 若块不为空，返回FlagRef
+    /// 若块不为空，返回Some
     ///
     /// 想得到最接近的Key的Value，使用find系列函数
     pub fn get(&self,idx: usize) -> Option<FlagRef<V>> {
@@ -367,7 +367,7 @@ where
     
     /// 通过索引得到引用
     ///
-    /// 若块不为空，返回FlagRef
+    /// 若块不为空，返回Some
     ///
     /// 想得到最接近的Key的Value，使用find系列函数
     ///
@@ -376,6 +376,27 @@ where
     pub fn unchecked_get(&self,idx: usize) -> Option<FlagRef<V>> {
         match self.items[idx] {
             RawField::Thing(ref t) => Some(t.2.flag_borrow()),
+            _ => None
+        }
+    }
+    
+    /// 通过索引得到块键值对(key,FlagRef<V>)
+    ///
+    /// 若块不为空，返回Some
+    pub fn get_key_value(&self,idx: usize) -> Option<(K,FlagRef<V>)> {
+        let thing = self.as_thing(idx)?;
+        Some((thing.1,thing.2.flag_borrow()))
+    }
+    
+    /// 通过索引得到块键值对(key,FlagRef<V>)
+    ///
+    /// 若块不为空，返回Some
+    ///
+    /// # Panics
+    /// 越界访问时panic
+    pub fn unchecked_get_key_value(&self,idx: usize) -> Option<(K,FlagRef<V>)> {
+        match self.items[idx] {
+            RawField::Thing(ref t) => Some((t.1,t.2.flag_borrow())),
             _ => None
         }
     }
