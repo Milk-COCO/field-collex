@@ -525,7 +525,7 @@ where
         let items = &mut self.items;
         let len = items.len();
         
-        if(idx>=len) { return Err(EmptyField) }
+        if idx>=len { return Err(EmptyField) }
         
         if let RawField::Thing(_) = items[idx] {
             // 根据上一个元素与下一个元素，生成填充元素
