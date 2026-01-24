@@ -152,10 +152,10 @@ pub enum FindRawFieldMapError<I> {
 }
 
 
-type ReplaceResult<T,I> = Result<T, ReplaceRawFieldMapError<T,I>>;
+type ReplaceIndexResult<T,I> = Result<T, ReplaceIndexRawFieldMapError<T,I>>;
 
 #[derive(Error, Debug)]
-pub enum ReplaceRawFieldMapError<T,I> {
+pub enum ReplaceIndexRawFieldMapError<T,I> {
     /// 转换错误（携带失败的 T + 转换错误 I）
     #[error("转换失败，插入的值：{0:?}，错误：{1:?}")]
     IntoError(T, I),
@@ -165,21 +165,21 @@ pub enum ReplaceRawFieldMapError<T,I> {
     EmptyField(T),
 }
 
-impl<T,I> ReplaceRawFieldMapError<T,I>{
+impl<T,I> ReplaceIndexRawFieldMapError<T,I>{
     pub fn unwrap(self) -> T {
         match self {
-            ReplaceRawFieldMapError::IntoError(v, _) => {v}
-            ReplaceRawFieldMapError::BorrowConflict(v) => {v}
-            ReplaceRawFieldMapError::EmptyField(v) => {v}
+            ReplaceIndexRawFieldMapError::IntoError(v, _) => {v}
+            ReplaceIndexRawFieldMapError::BorrowConflict(v) => {v}
+            ReplaceIndexRawFieldMapError::EmptyField(v) => {v}
         }
     }
 }
 
 
-type RemoveResult<T,I> = Result<T, RemoveRawFieldMapError<I>>;
+type RemoveIndexResult<T,I> = Result<T, RemoveIndexRawFieldMapError<I>>;
 
 #[derive(Error, Debug)]
-pub enum RemoveRawFieldMapError<I> {
+pub enum RemoveIndexRawFieldMapError<I> {
     #[error(transparent)]
     IntoError(I),
     #[error("指定的块已为空块")]
@@ -494,8 +494,8 @@ where
     /// 用索引指定替换块
     ///
     /// 成功则返回其原值
-    fn replace_index(&mut self, idx: usize, value: V) -> ReplaceResult<V,IE> {
-        use ReplaceRawFieldMapError::*;
+    pub fn replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V,IE> {
+        use ReplaceIndexRawFieldMapError::*;
         
         let items = &mut self.items;
         let len = items.len();
@@ -518,9 +518,9 @@ where
     /// 用索引指定清空块。
     ///
     /// 若指定块非空，返回内部值。
-    fn remove_index(&mut self, idx: usize) -> RemoveResult<V, IE>
+    pub fn remove_index(&mut self, idx: usize) -> RemoveIndexResult<V, IE>
     {
-        use RemoveRawFieldMapError::*;
+        use RemoveIndexRawFieldMapError::*;
         
         let items = &mut self.items;
         let len = items.len();
