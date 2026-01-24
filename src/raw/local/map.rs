@@ -373,7 +373,7 @@ where
     /// 清空指定块。
     ///
     /// 若指定块非空，返回内部值。
-    pub fn remove(&mut self, idx: usize) -> RemoveResult<V, IE>
+    fn remove_index(&mut self, idx: usize) -> RemoveResult<V, IE>
     {
         use RemoveRawFieldMapError::*;
         
