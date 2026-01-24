@@ -513,17 +513,19 @@ where
         }
     }
     
-    /// 用索引指定清空块。
+    /// 用索引指定清空块，但不进行索引检查
     ///
     /// 若指定块非空，返回内部值。
-    pub fn remove_index(&mut self, idx: usize) -> RemoveIndexResult<V>
-    {
+    ///
+    /// 若指定块为空，返回None
+    ///
+    /// # Panics
+    /// 索引越界时panic
+    pub fn unchecked_remove_index(&mut self, idx: usize) -> RemoveIndexResult<V> {
         use RemoveIndexRawFieldMapError::*;
         
         let items = &mut self.items;
         let len = items.len();
-        
-        if idx>=len { return Err(EmptyField) }
         
         if let RawField::Thing(_) = items[idx] {
             // 根据上一个元素与下一个元素，生成填充元素
@@ -592,6 +594,21 @@ where
         } else {
             Err(EmptyField)
         }
+    }
+    
+    /// 用索引指定清空块。
+    ///
+    /// 若指定块非空，返回内部值。
+    pub fn remove_index(&mut self, idx: usize) -> RemoveIndexResult<V>
+    {
+        use RemoveIndexRawFieldMapError::*;
+        
+        let items = &mut self.items;
+        let len = items.len();
+        
+        if idx>=len { return Err(EmptyField) }
+        
+        self.unchecked_remove_index(idx)
     }
     
     /// 通用底层查找核心
