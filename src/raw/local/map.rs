@@ -361,6 +361,16 @@ where
         } else { false }
     }
     
+    /// 索引对应块是非空则返回Some，带边界检查
+    fn as_thing(&self, idx: usize) -> Option<&FlagCell<(K,V)>> {
+        if idx<=self.items.len() {
+            match self.items[idx] {
+                RawField::Thing(ref v) => Some(v),
+                _ => None
+            }
+        } else { None }
+    }
+    
     /// 计算指定key对应的块索引，统一错误处理
     #[inline(always)]
     fn idx_of_key(&self, key: K) -> Result<usize, IE> {
@@ -471,9 +481,9 @@ where
             Err(e) => {return Err(IntoError(tuple.1,e));}
         };
         
-        if self.is_thing(idx){
+        if let Some(thing) = self.as_thing(idx){
             // 已存在，则替换并返回其原键值
-            match self.items[idx].as_thing().try_replace(tuple) {
+            match thing.try_replace(tuple) {
                 Ok(v) => {Ok(Some(v))}
                 Err(v) => {Err(BorrowConflict(v.1))}
             }
