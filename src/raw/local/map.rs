@@ -345,22 +345,22 @@ where
     
     /// 尝试插入键值对
     ///
-    /// 插入失败会返回 `TryInsertRawFieldMapError` ，使用 `unwrap` 方法得到传入值 `(key,value)`。
-    pub fn try_insert(&mut self, key: K, value: V) -> TryInsertResult<(K, V), IE>
+    /// 插入失败会返回 `TryInsertRawFieldMapError` ，使用 `unwrap` 方法得到传入值 `value`。
+    pub fn try_insert(&mut self, key: K, value: V) -> TryInsertResult<V, IE>
     {
         use TryInsertRawFieldMapError::*;
         let tuple = (key,value);
         let span = &self.span;
-        if !span.contains(&key) { return Err(OutOfSpan(tuple)) }
+        if !span.contains(&key) { return Err(OutOfSpan(tuple.1)) }
         
         // 计算目标索引并防越界
         let idx = match self.idx_of_key(key){
             Ok(v) => {v}
-            // 需要拿走所有权所以只能这么写
-            Err(e) => {return Err(IntoError(tuple,e));}
+            // 需要拿走所有权所以只能这么match
+            Err(e) => {return Err(IntoError(tuple.1,e));}
         };
         
-        if self.is_thing(idx) {return Err(AlreadyExists(tuple))};
+        if self.is_thing(idx) {return Err(AlreadyExists(tuple.1))};
         
         self.try_insert_in(
             idx,
