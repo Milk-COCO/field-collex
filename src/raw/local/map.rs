@@ -356,6 +356,30 @@ where
         &self.unit
     }
     
+    /// 通过索引得到引用
+    ///
+    /// 若块不为空，返回FlagRef
+    ///
+    /// 想得到最接近的Key的Value，使用find系列函数
+    pub fn get(&self,idx: usize) -> Option<FlagRef<V>> {
+        Some(self.as_thing(idx)?.2.flag_borrow())
+    }
+    
+    /// 通过索引得到引用
+    ///
+    /// 若块不为空，返回FlagRef
+    ///
+    /// 想得到最接近的Key的Value，使用find系列函数
+    ///
+    /// # Panics
+    /// 越界访问时panic
+    pub fn unchecked_get(&self,idx: usize) -> Option<FlagRef<V>> {
+        match self.items[idx] {
+            RawField::Thing(ref t) => Some(t.2.flag_borrow()),
+            _ => None
+        }
+    }
+    
     /// 返回最大块数量
     ///
     /// 若Span是无限区间，返回Ok(None) <br>
@@ -388,6 +412,18 @@ where
         if idx<=self.items.len() {
             matches!(self.items[idx], RawField::Thing(_))
         } else { false }
+    }
+    
+    /// 返回引用
+    ///
+    /// 索引对应块是非空则返回Some，带边界检查
+    fn as_thing(&self, idx: usize) -> Option<&(usize, K, FlagCell<V>)> {
+        if idx<=self.items.len() {
+            match self.items[idx] {
+                RawField::Thing(ref v) => Some(v),
+                _ => None
+            }
+        } else { None }
     }
     
     /// 返回可变引用
