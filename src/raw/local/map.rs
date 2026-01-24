@@ -176,12 +176,10 @@ impl<T,I> ReplaceIndexRawFieldMapError<T,I>{
 }
 
 
-type RemoveIndexResult<T,I> = Result<T, RemoveIndexRawFieldMapError<I>>;
+type RemoveIndexResult<T> = Result<T, RemoveIndexRawFieldMapError>;
 
 #[derive(Error, Debug)]
-pub enum RemoveIndexRawFieldMapError<I> {
-    #[error(transparent)]
-    IntoError(I),
+pub enum RemoveIndexRawFieldMapError {
     #[error("指定的块已为空块")]
     EmptyField,
 }
@@ -518,7 +516,7 @@ where
     /// 用索引指定清空块。
     ///
     /// 若指定块非空，返回内部值。
-    pub fn remove_index(&mut self, idx: usize) -> RemoveIndexResult<V, IE>
+    pub fn remove_index(&mut self, idx: usize) -> RemoveIndexResult<V>
     {
         use RemoveIndexRawFieldMapError::*;
         
