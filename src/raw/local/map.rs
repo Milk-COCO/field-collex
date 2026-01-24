@@ -103,6 +103,7 @@ impl<T> RawField<T> {
     
     /// 解包得到内部值
     ///
+    /// # Panics
     /// 若非Thing，或正在被借用，panic
     pub fn unwrap(self) -> T {
         if let RawField::Thing(t) = self {
@@ -182,7 +183,7 @@ pub enum RemoveRawFieldMapError<I> {
     #[error(transparent)]
     IntoError(I),
     #[error("指定的块已为空块")]
-    AlreadyEmpty,
+    EmptyField,
 }
 
 type TryInsertResult<T,I> = Result<(), TryInsertRawFieldMapError<T,I>>;
@@ -373,6 +374,7 @@ where
             let fill_field = if self.items.is_empty() {
                 RawField::Void
             } else {
+                // 上面已作空校验，不会panic
                 self.items.last().unwrap().borrow_prev_or_clone()
             };
             self.items.resize_with(
@@ -523,7 +525,7 @@ where
         let items = &mut self.items;
         let len = items.len();
         
-        if(idx>=len) { return Err(AlreadyEmpty) }
+        if(idx>=len) { return Err(EmptyField) }
         
         if let RawField::Thing(_) = items[idx] {
             // 根据上一个元素与下一个元素，生成填充元素
@@ -568,13 +570,14 @@ where
                 };
             
             // 更新自己
-            let old = mem::replace(&mut items[idx], new.partial_clone().unwrap());
+            // 见上，new不可能为Thing，故不可能panic。下同
+            let old = mem::replace(&mut items[idx], new.clone());
             
             // 向前更新
             items[0..idx].iter_mut().rev()
                 .take_while(|v| !matches!(v, RawField::Thing(_)) )
                 .for_each(|v| {
-                    let new = new.partial_clone().unwrap();
+                    let new = new.clone();
                     let _ = mem::replace(v, new);
                 });
             
@@ -582,14 +585,14 @@ where
             items[idx+1..len].iter_mut()
                 .take_while(|v| !matches!(v, RawField::Thing(_)) )
                 .for_each(|v| {
-                    let new = new.partial_clone().unwrap();
+                    let new = new.clone();
                     let _ = mem::replace(v, new);
                 });
             
             // 刚刚更新的过程中已确保不再存在任何自己的借用，直接unwrap！
             Ok(old.unwrap().1)
         } else {
-            Err(AlreadyEmpty)
+            Err(EmptyField)
         }
     }
     
@@ -602,6 +605,7 @@ where
     /// - lmt: 边界兜底规则  | (当前索引, 数组长度) -> bool | true = 触达边界，返回None
     /// - next: 索引跳转规则 | (当前索引) -> usize | 返回查找目标索引
     ///
+    /// 因为查找是O(1)所以暂不使用迭代器
     fn find_in(
         &self,
         target: K,
