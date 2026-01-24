@@ -344,18 +344,20 @@ where
         let tuple = (key,value);
         let span = &self.span;
         if !span.contains(&key) { return Err(OutOfSpan(tuple)) }
-        // 计算目标索引并防越界
-        let idx =
-                TryInto::<usize>::try_into(
-                    (key - *span.start())/self.unit
-                ).map_err(IntoError)?;
         
-        let items = &mut self.items;
+        // 计算目标索引并防越界
+        let idx = match self.idx_of_key(key){
+            Ok(v) => {v}
+            // 需要拿走所有权所以只能这么些
+            Err(e) => {return Err(IntoError(tuple,e));}
+        };
+        
+        if self.is_thing(idx) {return Err(AlreadyExists(tuple))};
         
         // 扩容到目标索引
         self.resize_to_idx(idx);
         
-        if let RawField::Thing(_) = items[idx] {return Err(AlreadyExists(tuple))};
+        let items = &mut self.items;
         
         
         let cell = FlagCell::new(tuple);
