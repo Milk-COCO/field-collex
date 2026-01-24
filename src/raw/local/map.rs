@@ -27,6 +27,21 @@ enum RawField<T> {
 }
 
 impl<T> RawField<T> {
+    
+    pub fn as_thing(&self) -> &FlagCell<T> {
+        match self {
+            Self::Thing(c) => c,
+            _ => panic!("Called `RawField::into_thing()` on a not `Thing` value`"),
+        }
+    }
+    
+    pub fn into_thing(self) -> FlagCell<T> {
+        match self {
+            Self::Thing(c) => c,
+            _ => panic!("Called `RawField::into_thing()` on a not `Thing` value`"),
+        }
+    }
+    
     pub fn partial_clone(&self) -> Option<RawField<T>> {
         match self {
             RawField::Thing(_)
@@ -98,6 +113,27 @@ impl<T> RawField<T> {
     }
 }
 
+impl<T> Clone for RawField<T> {
+    /// 克隆内部引用
+    /// 
+    /// # Panics
+    /// 若为 `Thing`，panic 
+    fn clone(&self) -> Self {
+        match self {
+            RawField::Thing(_)
+            => panic!("Called `RawField::clone()` on a `Thing` value"),
+            RawField::Prev(prev)
+            => RawField::Prev(prev.clone()),
+            RawField::Among(prev, next)
+            => RawField::Among(prev.clone(), next.clone()),
+            RawField::Next(next)
+            => RawField::Next(next.clone()),
+            RawField::Void
+            => RawField::Void,
+        }
+    }
+}
+
 type FindResult<T,I> = Result<T, FindRawFieldMapError<I>>;
 
 #[derive(Error, Debug)]
@@ -113,6 +149,31 @@ pub enum FindRawFieldMapError<I> {
     #[error("当前无数据可查询")]
     Empty,
 }
+
+
+type ReplaceResult<T,I> = Result<T, ReplaceRawFieldMapError<T,I>>;
+
+#[derive(Error, Debug)]
+pub enum ReplaceRawFieldMapError<T,I> {
+    /// 转换错误（携带失败的 T + 转换错误 I）
+    #[error("转换失败，插入的值：{0:?}，错误：{1:?}")]
+    IntoError(T, I),
+    #[error("指定的块正在被借用中")]
+    BorrowConflict(T),
+    #[error("指定的块为空块")]
+    EmptyField(T),
+}
+
+impl<T,I> ReplaceRawFieldMapError<T,I>{
+    pub fn unwrap(self) -> T {
+        match self {
+            ReplaceRawFieldMapError::IntoError(v, _) => {v}
+            ReplaceRawFieldMapError::BorrowConflict(v) => {v}
+            ReplaceRawFieldMapError::EmptyField(v) => {v}
+        }
+    }
+}
+
 
 type RemoveResult<T,I> = Result<T, RemoveRawFieldMapError<I>>;
 
@@ -144,6 +205,29 @@ impl<T,I> TryInsertRawFieldMapError<T,I>{
             TryInsertRawFieldMapError::IntoError(v, _) => {v}
             TryInsertRawFieldMapError::OutOfSpan(v) => {v}
             TryInsertRawFieldMapError::AlreadyExists(v) => {v}
+        }
+    }
+}
+
+type InsertResult<K,V,I> = Result<Option<(K,V)>, InsertRawFieldMapError<V,I>>;
+#[derive(Error, Debug)]
+pub enum InsertRawFieldMapError<T,I> {
+    /// 转换错误（携带失败的 T + 转换错误 I）
+    #[error("转换失败，插入的值：{0:?}，错误：{1:?}")]
+    IntoError(T, I),
+    /// Key超出span范围（携带失败的 T）
+    #[error("Key超出了当前RawFieldMap的span范围，插入的值：{0:?}")]
+    OutOfSpan(T),
+    #[error("指定的块正在被借用中")]
+    BorrowConflict(T)
+}
+
+impl<T,I> InsertRawFieldMapError<T,I>{
+    pub fn unwrap(self) -> T {
+        match self {
+            InsertRawFieldMapError::IntoError(v, _) => {v}
+            InsertRawFieldMapError::OutOfSpan(v) => {v}
+            InsertRawFieldMapError::BorrowConflict(v) => {v}
         }
     }
 }
@@ -353,7 +437,6 @@ where
         let span = &self.span;
         if !span.contains(&key) { return Err(OutOfSpan(tuple.1)) }
         
-        // 计算目标索引并防越界
         let idx = match self.idx_of_key(key){
             Ok(v) => {v}
             // 需要拿走所有权所以只能这么match
@@ -369,8 +452,68 @@ where
         Ok(())
     }
     
+    /// 插入键值对
+    ///
+    /// 若对应块已有值，新键值将替换原键值，返回Ok(Some(V))包裹原键值。<br>
+    /// 若无值，插入新值返回None。
+    ///
+    /// 插入失败会返回 `InsertRawFieldMapError` ，使用 `unwrap` 方法得到传入值 `(key,value)`。
+    pub fn insert(&mut self, key: K, value: V) -> InsertResult<K, V, IE>
+    {
+        use InsertRawFieldMapError::*;
+        let tuple = (key,value);
+        let span = &self.span;
+        if !span.contains(&key) { return Err(OutOfSpan(tuple.1)) }
+        
+        let idx = match self.idx_of_key(key){
+            Ok(v) => {v}
+            // 需要拿走所有权所以只能这么match
+            Err(e) => {return Err(IntoError(tuple.1,e));}
+        };
+        
+        if self.is_thing(idx){
+            // 已存在，则替换并返回其原键值
+            match self.items[idx].as_thing().try_replace(tuple) {
+                Ok(v) => {Ok(Some(v))}
+                Err(v) => {Err(BorrowConflict(v.1))}
+            }
+        } else {
+            // 同 try_insert
+            self.try_insert_in(
+                idx,
+                tuple
+            );
+            
+            Ok(None)
+        }
+        
+    }
     
-    /// 清空指定块。
+    /// 用索引指定替换块
+    ///
+    /// 成功则返回其原值
+    fn replace_index(&mut self, idx: usize, value: V) -> ReplaceResult<V,IE> {
+        use ReplaceRawFieldMapError::*;
+        
+        let items = &mut self.items;
+        let len = items.len();
+        
+        if(idx>=len) { return Err(EmptyField(value)) }
+        
+        if let RawField::Thing(ref mut thing) = items[idx] {
+            match thing.try_replace((match thing.try_borrow(){
+                None => {return Err(BorrowConflict(value))}
+                Some(v) => {v}
+            }.0, value)) {
+                Ok(v) => {Ok(v.1)}
+                Err(v) => {Err(BorrowConflict(v.1))}
+            }
+        } else {
+            Err(EmptyField(value))
+        }
+    }
+    
+    /// 用索引指定清空块。
     ///
     /// 若指定块非空，返回内部值。
     fn remove_index(&mut self, idx: usize) -> RemoveResult<V, IE>
