@@ -508,7 +508,7 @@ where
         let items = &mut self.items;
         let len = items.len();
         
-        if(idx>=len) { return Err(EmptyField(value)) }
+        if idx>=len { return Err(EmptyField(value)) }
         
         if let RawField::Thing(ref mut thing) = items[idx] {
             match thing.try_replace((match thing.try_borrow(){
@@ -621,6 +621,21 @@ where
         self.unchecked_remove_index(idx)
     }
     
+    /// find通用前置检查，返回target对应索引
+    fn find_checker(
+        &self,
+        target: K,
+    ) -> FindResult<usize, IE> {
+        use FindRawFieldMapError::*;
+        let span = &self.span;
+        if !span.contains(&target) { return Err(OutOfSpan); }
+        let items = &self.items;
+        let len = items.len();
+        if len == 0 { return Err(Empty); }
+        
+        Ok(self.idx_of_key(target).map_err(IntoError)?.min(len - 1))
+    }
+    
     /// 通用底层查找核心
     ///
     /// # 参数
@@ -640,14 +655,10 @@ where
         next: impl FnOnce(usize) -> usize,
     ) -> FindResult<Ref<'_, V>, IE> {
         use FindRawFieldMapError::*;
-        let span = &self.span;
-        if !span.contains(&target) { return Err(OutOfSpan); }
+        
+        let idx = self.find_checker(target)?;
         let items = &self.items;
         let len = items.len();
-        if len == 0 { return Err(Empty); }
-        
-        let idx = self.idx_of_key(target).map_err(IntoError)?.min(len - 1);
-        
         let current = matcher(&items[idx])?;
         
         Ok(if cmp(&current.0, &target) {
@@ -655,6 +666,28 @@ where
         } else {
             if lmt(idx, len) { return Err(CannotFind); }
             Ref::map(matcher(&items[next(idx)])?, |t| &t.1)
+        })
+    }
+    
+    fn find_index_in(
+        &self,
+        target: K,
+        matcher: impl Fn(&RawField<(K, V)>) -> FindResult<Ref<'_, (K, V)>, IE>,
+        cmp: impl FnOnce(&K,&K) -> bool,
+        lmt: impl FnOnce(usize,usize) -> bool,
+        next: impl FnOnce(usize) -> usize,
+    ) -> FindResult<usize, IE> {
+        use FindRawFieldMapError::*;
+        let idx = self.find_checker(target)?;
+        let items = &self.items;
+        let len = items.len();
+        let current = matcher(&items[idx])?;
+        
+        Ok(if cmp(&current.0, &target) {
+            idx
+        } else {
+            if lmt(idx, len) { return Err(CannotFind); }
+            next(idx)
         })
     }
     
