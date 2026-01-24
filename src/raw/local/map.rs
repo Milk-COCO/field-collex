@@ -499,18 +499,17 @@ where
         
     }
     
+    
     /// 用索引指定替换块
     ///
     /// 成功则返回其原值
-    pub fn replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V,IE> {
+    ///
+    /// # Panics
+    /// 索引越界时panic
+    pub fn unchecked_replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V,IE> {
         use ReplaceIndexRawFieldMapError::*;
         
-        let items = &mut self.items;
-        let len = items.len();
-        
-        if idx>=len { return Err(EmptyField(value)) }
-        
-        if let RawField::Thing(ref mut thing) = items[idx] {
+        if let RawField::Thing(ref mut thing) = self.items[idx] {
             match thing.try_replace((match thing.try_borrow(){
                 None => {return Err(BorrowConflict(value))}
                 Some(v) => {v}
@@ -523,11 +522,23 @@ where
         }
     }
     
+    /// 用索引指定替换块
+    ///
+    /// 成功则返回其原值
+    pub fn replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V,IE> {
+        use ReplaceIndexRawFieldMapError::*;
+        
+        let items = &mut self.items;
+        let len = items.len();
+        
+        if idx>=len { return Err(EmptyField(value)) }
+        
+        self.unchecked_replace_index(idx,value)
+    }
+    
     /// 用索引指定清空块，但不进行索引检查
     ///
     /// 若指定块非空，返回内部值。
-    ///
-    /// 若指定块为空，返回None
     ///
     /// # Panics
     /// 索引越界时panic
