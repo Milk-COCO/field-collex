@@ -300,12 +300,20 @@ where
     }
     
     // 辅助函数：执行插入/替换后的前后更新逻辑
-    fn insert_update_prev_next(
+    fn try_insert_in(
         &mut self,
         idx: usize,
-        flag_ref: FlagRef<(K, V)>,
+        thing: (K, V),
     ) {
+        // 扩容到目标索引
+        self.resize_to_idx(idx);
+        
         let items = &mut self.items;
+        
+        let cell = FlagCell::new(thing);
+        let flag_ref = cell.flag_borrow();
+        items[idx] = RawField::Thing(cell);
+        
         let len = items.len();
         
         // 向后更新
@@ -348,25 +356,15 @@ where
         // 计算目标索引并防越界
         let idx = match self.idx_of_key(key){
             Ok(v) => {v}
-            // 需要拿走所有权所以只能这么些
+            // 需要拿走所有权所以只能这么写
             Err(e) => {return Err(IntoError(tuple,e));}
         };
         
         if self.is_thing(idx) {return Err(AlreadyExists(tuple))};
         
-        // 扩容到目标索引
-        self.resize_to_idx(idx);
-        
-        let items = &mut self.items;
-        
-        
-        let cell = FlagCell::new(tuple);
-        let flag_ref = cell.flag_borrow();
-        items[idx] = RawField::Thing(cell);
-        
-        self.insert_update_prev_next(
+        self.try_insert_in(
             idx,
-            flag_ref
+            tuple
         );
         Ok(())
     }
