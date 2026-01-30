@@ -122,7 +122,7 @@ impl<T,I> InsertRawFieldMapError<T,I>{
 ///
 /// 最大块数量为`(span/unit).into() + 1`
 ///
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct RawFieldMap<K,V>
 where
     K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Sized + Real,
