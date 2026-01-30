@@ -4,7 +4,6 @@ pub mod map;
 pub mod set;
 pub mod collex;
 
-
 /// 一个块。详见 具体容器类型 。
 ///
 /// Thing：本块有元素 <br>
@@ -135,6 +134,27 @@ where K:Copy
             t.2.unwrap()
         } else {
             panic!("called `RawField::unwrap()` on a not `Thing` value")
+        }
+    }
+}
+
+impl<K: Copy,T> Clone for RawField<K,T> {
+    /// 克隆内部引用
+    ///
+    /// # Panics
+    /// 若为 `Thing`，panic
+    fn clone(&self) -> Self {
+        match self {
+            RawField::Thing(_)
+            => panic!("Called `RawField::clone()` on a `Thing` value"),
+            RawField::Prev(prev)
+            => Self::prev(prev.clone()),
+            RawField::Among(prev, next)
+            => Self::among(prev.clone(), next.clone()),
+            RawField::Next(next)
+            => Self::next(next.clone()),
+            RawField::Void
+            => RawField::Void,
         }
     }
 }

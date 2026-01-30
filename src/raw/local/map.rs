@@ -8,27 +8,6 @@ use std::ops::*;
 use std::vec::Vec;
 use thiserror::Error;
 
-impl<K: Copy,T> Clone for RawField<K,T> {
-    /// 克隆内部引用
-    /// 
-    /// # Panics
-    /// 若为 `Thing`，panic 
-    fn clone(&self) -> Self {
-        match self {
-            RawField::Thing(_)
-            => panic!("Called `RawField::clone()` on a `Thing` value"),
-            RawField::Prev(prev)
-            => Self::prev(prev.clone()),
-            RawField::Among(prev, next)
-            => Self::among(prev.clone(), next.clone()),
-            RawField::Next(next)
-            => Self::next(next.clone()),
-            RawField::Void
-            => RawField::Void,
-        }
-    }
-}
-
 type FindResult<T,I> = Result<T, FindRawFieldMapError<I>>;
 
 #[derive(Error, Debug)]
