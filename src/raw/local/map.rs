@@ -1,7 +1,7 @@
 use span_core::Span;
 use flag_cell::*;
 use num_traits::real::Real;
-use num_traits::Zero;
+use num_traits::{Float, Zero};
 use super::RawField;
 use std::mem;
 use std::ops::*;
@@ -125,7 +125,7 @@ impl<T,I> InsertRawFieldMapError<T,I>{
 #[derive(Default)]
 pub struct RawFieldMap<K,V>
 where
-    K: Default + Copy + Ord + Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Zero + Real + Sized,
+    K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Sized + Real,
 {
     span: Span<K>,
     unit: K,
@@ -135,7 +135,7 @@ where
 
 impl<K,V,IE> RawFieldMap<K,V>
 where
-    K: Default + Copy + Ord + Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize,Error=IE> + Zero + Real + Sized,
+    K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize,Error=IE> + Sized + Real,
 {
     /// 提供span与unit，构建一个RawFieldMap
     ///
