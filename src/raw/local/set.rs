@@ -83,7 +83,7 @@ pub enum FindRawFieldSetError<I> {
     Empty,
 }
 
-pub(crate) type ReplaceIndexResult<I> = Result<(), ReplaceIndexRawFieldSetError<I>>;
+pub(crate) type ReplaceIndexResult<T,I> = Result<T, ReplaceIndexRawFieldSetError<I>>;
 
 #[derive(Error, Debug)]
 pub enum ReplaceIndexRawFieldSetError<I> {
@@ -400,12 +400,11 @@ where
     ///
     /// # Panics
     /// 索引越界时panic
-    pub fn unchecked_replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<IE> {
+    pub fn unchecked_replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V,IE> {
         use ReplaceIndexRawFieldSetError::*;
         
         if let RawField::Thing(ref mut thing) = self.items[idx] {
-            thing.1 = value;
-            Ok(())
+            Ok(mem::replace(&mut (thing.1),value))
         } else {
             Err(EmptyField)
         }
@@ -414,7 +413,7 @@ where
     /// 用索引指定替换块
     ///
     /// 成功则返回其原值
-    pub fn replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<IE> {
+    pub fn replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V,IE> {
         use ReplaceIndexRawFieldSetError::*;
         
         let items = &mut self.items;
