@@ -303,7 +303,7 @@ where
     /// 返回引用
     ///
     /// 索引对应块是非空则返回Some，带边界检查
-    fn as_thing(&self, idx: usize) -> Option<&(usize, K, FlagCell<V>)> {
+    pub(crate) fn as_thing(&self, idx: usize) -> Option<&(usize, K, FlagCell<V>)> {
         if idx<=self.items.len() {
             match self.items[idx] {
                 RawField::Thing(ref v) => Some(v),
@@ -315,7 +315,7 @@ where
     /// 返回可变引用
     ///
     /// 索引对应块是非空则返回Some，带边界检查
-    fn as_thing_mut(&mut self, idx: usize) -> Option<&mut (usize, K, FlagCell<V>)> {
+    pub(crate) fn as_thing_mut(&mut self, idx: usize) -> Option<&mut (usize, K, FlagCell<V>)> {
         if idx<=self.items.len() {
             match self.items[idx] {
                 RawField::Thing(ref mut v) => Some(v),
@@ -326,11 +326,11 @@ where
     
     /// 计算指定key对应的块索引，统一错误处理
     #[inline(always)]
-    fn idx_of_key(&self, key: K) -> Result<usize, IE> {
+    pub(crate) fn idx_of_key(&self, key: K) -> Result<usize, IE> {
         ((key - *self.span.start()) / self.unit).try_into()
     }
     
-    fn resize_to_idx(&mut self, idx: usize) {
+    pub(crate) fn resize_to_idx(&mut self, idx: usize) {
         if self.items.len() <= idx {
             let fill_field = if self.items.is_empty() {
                 RawField::Void
@@ -347,7 +347,7 @@ where
     }
     
     // 辅助函数：执行插入/替换后的前后更新逻辑
-    fn try_insert_in(
+    pub(crate) fn try_insert_in(
         &mut self,
         idx: usize,
         key: K,
@@ -586,7 +586,7 @@ where
     }
     
     /// find通用前置检查，返回target对应索引
-    fn find_checker(
+    pub(crate) fn find_checker(
         &self,
         target: K,
     ) -> FindResult<usize, IE> {
@@ -610,7 +610,7 @@ where
     /// - next: 索引跳转规则 | (当前索引) -> usize | 返回查找目标索引
     ///
     /// 因为查找是O(1)所以暂不使用迭代器
-    fn find_in(
+    pub(crate) fn find_in(
         &self,
         target: K,
         matcher: impl Fn(&Self, &RawField<K, V>) -> FindResult<(usize, K, FlagRef<V>), IE>,
@@ -635,7 +635,7 @@ where
         })
     }
     
-    fn find_index_in(
+    pub(crate) fn find_index_in(
         &self,
         target: K,
         matcher: impl Fn(&Self, &RawField<K, V>) -> FindResult<(usize, K, FlagRef<V>), IE>,
@@ -658,7 +658,7 @@ where
         })
     }
     
-    fn matcher_l(this: &Self, field: &RawField<K, V>) -> FindResult<(usize,K,FlagRef<V>), IE> {
+    pub(crate) fn matcher_l(this: &Self, field: &RawField<K, V>) -> FindResult<(usize,K,FlagRef<V>), IE> {
         use FindRawFieldMapError::*;
         Ok(match field {
             RawField::Thing(thing)
@@ -676,7 +676,7 @@ where
         })
     }
     
-    fn matcher_r(this: &Self, field: &RawField<K, V>) -> FindResult<(usize,K,FlagRef<V>), IE> {
+    pub(crate) fn matcher_r(this: &Self, field: &RawField<K, V>) -> FindResult<(usize,K,FlagRef<V>), IE> {
         use FindRawFieldMapError::*;
         Ok(match field {
             RawField::Thing(thing)
@@ -741,7 +741,6 @@ where
             |idx| idx+1
         )
     }
-    
     
     /// 找到最近的小于等于 target 的值的索引
     ///
