@@ -7,27 +7,27 @@ use thiserror::Error;
 
 /// 一个块。详见 具体容器类型 。
 ///
-/// Thing：本块有元素，存本块索引+Key <br>
+/// Thing：本块有元素，存本块索引+值 <br>
 /// Prev ：本块无元素，有前一个非空块，存其索引 <br>
 /// Among：本块无元素，有前与后一个非空块，存其二者索引 <br>
 /// Next ：本块无元素，有后一个非空块，存其索引 <br>
 /// Void ：容器完全无任何元素 <br>
 ///
 #[derive(Debug, Clone)]
-pub(crate) enum RawField<K>
-where K:Copy
+pub(crate) enum RawField<V>
+where V:Copy
 {
-    Thing((usize,K)),
+    Thing((usize, V)),
     Prev (usize),
     Among(usize, usize),
     Next (usize),
     Void,
 }
 
-impl<K> RawField<K>
-where K:Copy
+impl<V> RawField<V>
+where V:Copy
 {
-    pub fn as_thing(&self) -> (usize, K) {
+    pub fn as_thing(&self) -> (usize, V) {
         match self {
             Self::Thing(t) => *t,
             _ => panic!("Called `RawField::as_thing()` on a not `Thing` value`"),
@@ -60,11 +60,11 @@ where K:Copy
         }
     }
     
-    pub fn prev_from(tuple: &(usize,K)) -> Self {
+    pub fn prev_from(tuple: &(usize, V)) -> Self {
         Self::Prev(tuple.0)
     }
     
-    pub fn next_from(tuple: &(usize,K)) -> Self {
+    pub fn next_from(tuple: &(usize, V)) -> Self {
         Self::Next(tuple.0)
     }
 }
@@ -113,7 +113,7 @@ pub enum TryInsertRawFieldSetError<I> {
     AlreadyExists,
 }
 
-pub(crate) type InsertResult<K,I> = Result<Option<K>, InsertRawFieldSetError<I>>;
+pub(crate) type InsertResult<V,I> = Result<Option<V>, InsertRawFieldSetError<I>>;
 #[derive(Error, Debug)]
 pub enum InsertRawFieldSetError<I> {
     #[error(transparent)]
@@ -127,25 +127,25 @@ pub enum InsertRawFieldSetError<I> {
 /// O(1)根据upper_bound或lower_bound查找值
 /// 
 #[derive(Default, Debug)]
-pub struct RawFieldSet<K>
+pub struct RawFieldSet<V>
 where
-    K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Sized + Real,
+    V: Div<V,Output= V> + Sub<V,Output= V> + TryInto<usize> + Sized + Real,
 {
-    span: Span<K>,
-    unit: K,
-    items: Vec<RawField<K>>,
+    span: Span<V>,
+    unit: V,
+    items: Vec<RawField<V>>,
 }
 
-impl<K,IE> RawFieldSet<K>
+impl<V,IE> RawFieldSet<V>
 where
-    K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize,Error=IE> + Sized + Real,
+    V: Div<V,Output= V> + Sub<V,Output= V> + TryInto<usize,Error=IE> + Sized + Real,
 {
     /// 提供span与unit，构建一个RawFieldSet
     ///
     /// span为Key的范围，unit为每个块的大小，同时也是每个块之间的间隔
     ///
     /// 若unit为0 或 span为空，通过返回Err返还提供的数据
-    pub fn new(span: Span<K>, unit: K) -> Result<Self,(Span<K>,K)> {
+    pub fn new(span: Span<V>, unit: V) -> Result<Self,(Span<V>, V)> {
         if unit.is_zero() || span.is_empty() {
             Err((span, unit))
         } else {
@@ -162,7 +162,7 @@ where
     /// span为Key的范围，unit为每个块的大小，同时也是每个块之间的间隔
     ///
     /// 若unit为0、span为空、转换失败、capacity大于最大块数量，通过返回Err返还提供的数据
-    pub fn with_capacity(span: Span<K>, unit: K, capacity: usize) -> Result<Self,(Span<K>,K)> {
+    pub fn with_capacity(span: Span<V>, unit: V, capacity: usize) -> Result<Self,(Span<V>, V)> {
         if unit.is_zero() || span.is_empty() ||
             match span.size(){
                 Ok(Some(size)) => {
@@ -187,38 +187,38 @@ where
     
     // /// 尝试从内部数据构建一个 `RawFieldSet`
     // ///
-    // /// 若构建失败，返回传入值（`Err(Span<K>, K, Vec<(K,V)>`）。
-    // pub fn try_from_inner(span: Span<K>, unit: K, items: Vec<(K,V)>) -> Result<Self,(Span<K>, K, Vec<(K,V)>)> {
-    //     if span.size()< unit {
+    // /// 若构建失败，返回传入值（`Err(Span<V>, V, Vec<V>`）。
+    // pub fn try_from_inner(span: Span<V>, unit: V, items: Vec<V>) -> Result<Self,(Span<V>, V, Vec<V>)> {
+    //     if span.size() < unit {
     //         Err((span, unit, items))
     //     } else {
     //         Ok(Self { span, unit, items })
     //     }
     // }
     
-    pub fn span(&self) -> &Span<K> {
+    pub fn span(&self) -> &Span<V> {
         &self.span
     }
     
-    pub fn unit(&self) -> &K {
+    pub fn unit(&self) -> &V {
         &self.unit
     }
     
-    /// 通过索引得到块键
+    /// 通过索引得到值
     ///
     /// 若块不为空，返回Some
-    pub fn get(&self,idx: usize) -> Option<K> {
+    pub fn get(&self,idx: usize) -> Option<V> {
         let thing = self.as_thing(idx)?;
         Some(thing.1)
     }
     
-    /// 通过索引得到块键
+    /// 通过索引得到值
     ///
     /// 若块不为空，返回Some
     ///
     /// # Panics
     /// 越界访问时panic
-    pub fn unchecked_get(&self,idx: usize) -> Option<K> {
+    pub fn unchecked_get(&self,idx: usize) -> Option<V> {
         match self.items[idx] {
             RawField::Thing(ref t) => Some(t.1),
             _ => None
@@ -262,7 +262,7 @@ where
     /// 返回引用
     ///
     /// 索引对应块是非空则返回Some，带边界检查
-    pub(crate) fn as_thing(&self, idx: usize) -> Option<(usize, K)> {
+    pub(crate) fn as_thing(&self, idx: usize) -> Option<(usize, V)> {
         if idx < self.items.len() {
             match self.items[idx] {
                 RawField::Thing(ref v) => Some(*v),
@@ -274,7 +274,7 @@ where
     /// 返回引用
     ///
     /// 索引对应块是非空则返回Some，带边界检查
-    pub(crate) fn as_thing_mut(&mut self, idx: usize) -> Option<&mut (usize, K)> {
+    pub(crate) fn as_thing_mut(&mut self, idx: usize) -> Option<&mut (usize, V)> {
         if idx < self.items.len() {
             match self.items[idx] {
                 RawField::Thing(ref mut v) => Some(v),
@@ -283,10 +283,10 @@ where
         } else { None }
     }
     
-    /// 计算指定key对应的块索引，统一错误处理
+    /// 计算指定值对应的块索引
     #[inline(always)]
-    pub(crate) fn idx_of_key(&self, key: K) -> Result<usize, IE> {
-        ((key - *self.span.start()) / self.unit).try_into()
+    pub(crate) fn idx_of(&self, value: V) -> Result<usize, IE> {
+        ((value - *self.span.start()) / self.unit).try_into()
     }
     
     pub(crate) fn resize_to_idx(&mut self, idx: usize) {
@@ -310,7 +310,7 @@ where
     pub(crate) fn try_insert_in(
         &mut self,
         idx: usize,
-        key: K,
+        value: V,
     ) {
         // 扩容到目标索引
         self.resize_to_idx(idx);
@@ -341,18 +341,18 @@ where
                 };
             });
         
-        items[idx] = RawField::Thing((idx,key));
+        items[idx] = RawField::Thing((idx,value));
     }
     
-    /// 尝试插入键值对
+    /// 尝试插入值
     ///
     /// 插入失败会返回 `TryInsertRawFieldSetError` ，使用 `unwrap` 方法得到传入值 `value`。
-    pub fn try_insert(&mut self, key: K) -> TryInsertResult<IE> {
+    pub fn try_insert(&mut self, value: V) -> TryInsertResult<IE> {
         use TryInsertRawFieldSetError::*;
         let span = &self.span;
-        if !span.contains(&key) { return Err(OutOfSpan) }
+        if !span.contains(&value) { return Err(OutOfSpan) }
         
-        let idx = match self.idx_of_key(key){
+        let idx = match self.idx_of(value){
             Ok(v) => {v}
             // 需要拿走所有权所以只能这么match
             Err(e) => {return Err(IntoError(e));}
@@ -362,33 +362,33 @@ where
         
         self.try_insert_in(
             idx,
-            key,
+            value,
         );
         Ok(())
     }
     
-    /// 插入或替换键值对
+    /// 插入或替换值
     ///
-    /// 若对应块已有值，新键值将替换原键值，返回Ok(Some(V))包裹原键值。<br>
+    /// 若对应块已有值，新值将替换原值，返回Ok(Some(V))包裹原值。<br>
     /// 若无值，插入新值返回None。
     ///
-    pub fn insert(&mut self, key: K) -> InsertResult<K, IE>  {
+    pub fn insert(&mut self, value: V) -> InsertResult<V, IE>  {
         use InsertRawFieldSetError::*;
         let span = &self.span;
-        if !span.contains(&key) { return Err(OutOfSpan) }
+        if !span.contains(&value) { return Err(OutOfSpan) }
         
-        let idx = self.idx_of_key(key).map_err(IntoError)?;
+        let idx = self.idx_of(value).map_err(IntoError)?;
         
         if let Some(thing) = self.as_thing_mut(idx){
-            // 已存在，则替换并返回其原键
-            let key_old = thing.1;
-            thing.1 = key;
-            Ok(Some(key_old))
+            // 已存在，则替换并返回其原值
+            let old = thing.1;
+            thing.1 = value;
+            Ok(Some(old))
         } else {
             // 同 try_insert
             self.try_insert_in(
                 idx,
-                key,
+                value,
             );
             
             Ok(None)
@@ -402,11 +402,11 @@ where
     ///
     /// # Panics
     /// 索引越界时panic
-    pub fn unchecked_replace_index(&mut self, idx: usize, key: K) -> ReplaceIndexResult<IE> {
+    pub fn unchecked_replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<IE> {
         use ReplaceIndexRawFieldSetError::*;
         
         if let RawField::Thing(ref mut thing) = self.items[idx] {
-            thing.1 = key;
+            thing.1 = value;
             Ok(())
         } else {
             Err(EmptyField)
@@ -416,7 +416,7 @@ where
     /// 用索引指定替换块
     ///
     /// 成功则返回其原值
-    pub fn replace_index(&mut self, idx: usize, key: K) -> ReplaceIndexResult<IE> {
+    pub fn replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<IE> {
         use ReplaceIndexRawFieldSetError::*;
         
         let items = &mut self.items;
@@ -424,7 +424,7 @@ where
         
         if idx>=len { return Err(EmptyField) }
         
-        self.unchecked_replace_index(idx,key)
+        self.unchecked_replace_index(idx,value)
     }
     
     /// 用索引指定清空块，但不进行索引检查
@@ -433,7 +433,7 @@ where
     ///
     /// # Panics
     /// 索引越界时panic
-    pub fn unchecked_remove_index(&mut self, idx: usize) -> RemoveIndexResult<K> {
+    pub fn unchecked_remove_index(&mut self, idx: usize) -> RemoveIndexResult<V> {
         use RemoveIndexRawFieldSetError::*;
         
         let items = &mut self.items;
@@ -508,7 +508,7 @@ where
     /// 用索引指定清空块。
     ///
     /// 若指定块非空，返回内部值。
-    pub fn remove_index(&mut self, idx: usize) -> RemoveIndexResult<K>
+    pub fn remove_index(&mut self, idx: usize) -> RemoveIndexResult<V>
     {
         use RemoveIndexRawFieldSetError::*;
         
@@ -523,7 +523,7 @@ where
     /// find通用前置检查，返回target对应索引
     pub(crate) fn find_checker(
         &self,
-        target: K,
+        target: V,
     ) -> FindResult<usize, IE> {
         use FindRawFieldSetError::*;
         let span = &self.span;
@@ -532,14 +532,14 @@ where
         let len = items.len();
         if len == 0 { return Err(Empty); }
         
-        Ok(self.idx_of_key(target).map_err(IntoError)?.min(len - 1))
+        Ok(self.idx_of(target).map_err(IntoError)?.min(len - 1))
     }
     
     /// 通用底层查找核心
     ///
     /// # 参数
     /// - target: 查找目标值
-    /// - matcher: 字段匹配器，解耦左右查找的字段匹配逻辑，入参为数据数组+索引，返回匹配的(idx,K)
+    /// - matcher: 字段匹配器，解耦左右查找的字段匹配逻辑，入参为数据数组+索引，返回匹配的(idx, V)
     /// - cmp: 匹配判定规则  | (当前K, 目标K) -> bool | true = 命中当前项，直接返回V
     /// - lmt: 边界兜底规则  | (当前索引, 数组长度) -> bool | true = 触达边界，返回None
     /// - next: 索引跳转规则 | (当前索引) -> usize | 返回查找目标索引
@@ -547,12 +547,12 @@ where
     /// 因为查找是O(1)所以暂不使用迭代器
     pub(crate) fn find_in(
         &self,
-        target: K,
-        matcher: impl Fn(&Self, &RawField<K>) -> FindResult<(usize, K), IE>,
-        cmp: impl FnOnce(&K,&K) -> bool,
+        target: V,
+        matcher: impl Fn(&Self, &RawField<V>) -> FindResult<(usize, V), IE>,
+        cmp: impl FnOnce(&V,&V) -> bool,
         lmt: impl FnOnce(usize,usize) -> bool,
         next: impl FnOnce(usize) -> usize,
-    ) -> FindResult<K,IE>
+    ) -> FindResult<V,IE>
     {
         use FindRawFieldSetError::*;
         
@@ -572,9 +572,9 @@ where
     
     pub(crate) fn find_index_in(
         &self,
-        target: K,
-        matcher: impl Fn(&Self, &RawField<K>) -> FindResult<(usize, K), IE>,
-        cmp: impl FnOnce(&K,&K) -> bool,
+        target: V,
+        matcher: impl Fn(&Self, &RawField<V>) -> FindResult<(usize, V), IE>,
+        cmp: impl FnOnce(&V,&V) -> bool,
         lmt: impl FnOnce(usize,usize) -> bool,
         next: impl FnOnce(usize) -> usize,
     ) -> FindResult<usize, IE>
@@ -593,7 +593,7 @@ where
         })
     }
     
-    pub(crate) fn matcher_l(this: &Self, field: &RawField<K>) -> FindResult<(usize,K), IE> {
+    pub(crate) fn matcher_l(this: &Self, field: &RawField<V>) -> FindResult<(usize, V), IE> {
         use FindRawFieldSetError::*;
         Ok(match field {
             RawField::Thing(thing)
@@ -612,7 +612,7 @@ where
         })
     }
     
-    pub(crate) fn matcher_r(this: &Self, field: &RawField<K>) -> FindResult<(usize,K), IE> {
+    pub(crate) fn matcher_r(this: &Self, field: &RawField<V>) -> FindResult<(usize, V), IE> {
         use FindRawFieldSetError::*;
         Ok(match field {
             RawField::Thing(thing)
@@ -633,7 +633,7 @@ where
     
     /// 找到最近的小于等于 target 的值
     ///
-    pub fn find_le(&self, target: K) -> FindResult<K, IE> {
+    pub fn find_le(&self, target: V) -> FindResult<V, IE> {
         self.find_in(
             target,
             Self::matcher_l,
@@ -645,7 +645,7 @@ where
     
     /// 找到最近的小于 target 的值
     ///
-    pub fn find_lt(&self, target: K) -> FindResult<K, IE> {
+    pub fn find_lt(&self, target: V) -> FindResult<V, IE> {
         self.find_in(
             target,
             Self::matcher_l,
@@ -657,7 +657,7 @@ where
     
     /// 找到最近的大于等于 target 的值
     ///
-    pub fn find_ge(&self, target: K) -> FindResult<K, IE> {
+    pub fn find_ge(&self, target: V) -> FindResult<V, IE> {
         self.find_in(
             target,
             Self::matcher_r,
@@ -669,7 +669,7 @@ where
     
     /// 找到最近的大于 target 的值
     ///
-    pub fn find_gt(&self, target: K) -> FindResult<K, IE> {
+    pub fn find_gt(&self, target: V) -> FindResult<V, IE> {
         self.find_in(
             target,
             Self::matcher_r,
@@ -681,7 +681,7 @@ where
     
     /// 找到最近的小于等于 target 的值的索引
     ///
-    pub fn find_index_le(&self, target: K) -> FindResult<usize, IE> {
+    pub fn find_index_le(&self, target: V) -> FindResult<usize, IE> {
         self.find_index_in(
             target,
             Self::matcher_l,
@@ -693,7 +693,7 @@ where
     
     /// 找到最近的小于 target 的值的索引
     ///
-    pub fn find_index_lt(&self, target: K) -> FindResult<usize, IE> {
+    pub fn find_index_lt(&self, target: V) -> FindResult<usize, IE> {
         self.find_index_in(
             target,
             Self::matcher_l,
@@ -705,7 +705,7 @@ where
     
     /// 找到最近的大于等于 target 的值的索引
     ///
-    pub fn find_index_ge(&self, target: K) -> FindResult<usize, IE> {
+    pub fn find_index_ge(&self, target: V) -> FindResult<usize, IE> {
         self.find_index_in(
             target,
             Self::matcher_r,
@@ -717,7 +717,7 @@ where
     
     /// 找到最近的大于 target 的值的索引
     ///
-    pub fn find_index_gt(&self, target: K) -> FindResult<usize, IE> {
+    pub fn find_index_gt(&self, target: V) -> FindResult<usize, IE> {
         self.find_index_in(
             target,
             Self::matcher_r,
