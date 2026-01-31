@@ -346,7 +346,7 @@ where
     
     /// 尝试插入值
     ///
-    /// 插入失败会返回 `TryInsertRawFieldSetError` ，使用 `unwrap` 方法得到传入值 `value`。
+    /// 插入失败会返回 [`TryInsertRawFieldSetError`]
     pub fn try_insert(&mut self, value: V) -> TryInsertResult<IE> {
         use TryInsertRawFieldSetError::*;
         let span = &self.span;
