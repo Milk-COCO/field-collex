@@ -120,8 +120,6 @@ pub enum InsertRawFieldSetError<I> {
     IntoError(I),
     #[error("Key超出了当前RawFieldSet的span范围")]
     OutOfSpan,
-    #[error("指定的块正在被借用中")]
-    BorrowConflict
 }
 
 /// O(1)根据upper_bound或lower_bound查找值
