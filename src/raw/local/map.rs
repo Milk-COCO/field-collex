@@ -1,14 +1,13 @@
 use span_core::Span;
 use flag_cell::*;
 use num_traits::real::Real;
-use num_traits::{Float, Zero};
 use super::RawField;
 use std::mem;
 use std::ops::*;
 use std::vec::Vec;
 use thiserror::Error;
 
-type FindResult<T,I> = Result<T, FindRawFieldMapError<I>>;
+pub(crate) type FindResult<T,I> = Result<T, FindRawFieldMapError<I>>;
 
 #[derive(Error, Debug)]
 pub enum FindRawFieldMapError<I> {
@@ -25,7 +24,7 @@ pub enum FindRawFieldMapError<I> {
 }
 
 
-type ReplaceIndexResult<T,I> = Result<T, ReplaceIndexRawFieldMapError<T,I>>;
+pub(crate) type ReplaceIndexResult<T,I> = Result<T, ReplaceIndexRawFieldMapError<T,I>>;
 
 #[derive(Error, Debug)]
 pub enum ReplaceIndexRawFieldMapError<T,I> {
@@ -49,7 +48,7 @@ impl<T,I> ReplaceIndexRawFieldMapError<T,I>{
 }
 
 
-type RemoveIndexResult<T> = Result<T, RemoveIndexRawFieldMapError>;
+pub(crate) type RemoveIndexResult<T> = Result<T, RemoveIndexRawFieldMapError>;
 
 #[derive(Error, Debug)]
 pub enum RemoveIndexRawFieldMapError {
@@ -57,7 +56,7 @@ pub enum RemoveIndexRawFieldMapError {
     EmptyField,
 }
 
-type TryInsertResult<T,I> = Result<(), TryInsertRawFieldMapError<T,I>>;
+pub(crate) type TryInsertResult<T,I> = Result<(), TryInsertRawFieldMapError<T,I>>;
 #[derive(Error, Debug)]
 pub enum TryInsertRawFieldMapError<T,I> {
     /// 转换错误（携带失败的 T + 转换错误 I）
@@ -81,7 +80,7 @@ impl<T,I> TryInsertRawFieldMapError<T,I>{
     }
 }
 
-type InsertResult<K,V,I> = Result<Option<(K,V)>, InsertRawFieldMapError<V,I>>;
+pub(crate) type InsertResult<K,V,I> = Result<Option<(K,V)>, InsertRawFieldMapError<V,I>>;
 #[derive(Error, Debug)]
 pub enum InsertRawFieldMapError<T,I> {
     /// 转换错误（携带失败的 T + 转换错误 I）
@@ -396,8 +395,7 @@ where
     /// 尝试插入键值对
     ///
     /// 插入失败会返回 `TryInsertRawFieldMapError` ，使用 `unwrap` 方法得到传入值 `value`。
-    pub fn try_insert(&mut self, key: K, value: V) -> TryInsertResult<V, IE>
-    {
+    pub fn try_insert(&mut self, key: K, value: V) -> TryInsertResult<V, IE> {
         use TryInsertRawFieldMapError::*;
         let span = &self.span;
         if !span.contains(&key) { return Err(OutOfSpan(value)) }
@@ -418,14 +416,13 @@ where
         Ok(())
     }
     
-    /// 插入键值对
+    /// 插入或替换键值对
     ///
     /// 若对应块已有值，新键值将替换原键值，返回Ok(Some(V))包裹原键值。<br>
     /// 若无值，插入新值返回None。
     ///
     /// 插入失败会返回 `InsertRawFieldMapError` ，使用 `unwrap` 方法得到传入值 `(key,value)`。
-    pub fn insert(&mut self, key: K, value: V) -> InsertResult<K, V, IE>
-    {
+    pub fn insert(&mut self, key: K, value: V) -> InsertResult<K, V, IE>  {
         use InsertRawFieldMapError::*;
         let span = &self.span;
         if !span.contains(&key) { return Err(OutOfSpan(value)) }
@@ -456,7 +453,6 @@ where
             
             Ok(None)
         }
-        
     }
     
     
