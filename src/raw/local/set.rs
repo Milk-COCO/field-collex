@@ -204,27 +204,6 @@ where
         &self.unit
     }
     
-    /// 通过索引得到值
-    ///
-    /// 若块不为空，返回Some
-    pub fn get(&self,idx: usize) -> Option<V> {
-        let thing = self.as_thing(idx)?;
-        Some(thing.1)
-    }
-    
-    /// 通过索引得到值
-    ///
-    /// 若块不为空，返回Some
-    ///
-    /// # Panics
-    /// 越界访问时panic
-    pub fn unchecked_get(&self,idx: usize) -> Option<V> {
-        match self.items[idx] {
-            RawField::Thing(ref t) => Some(t.1),
-            _ => None
-        }
-    }
-    
     /// 返回最大块数量
     ///
     /// 若Span是无限区间，返回Ok(None) <br>
@@ -303,6 +282,27 @@ where
                 }
             };
             self.items.resize(idx+1,filler);
+        }
+    }
+    
+    /// 通过索引得到值
+    ///
+    /// 若块不为空，返回Some
+    pub fn get(&self,idx: usize) -> Option<V> {
+        let thing = self.as_thing(idx)?;
+        Some(thing.1)
+    }
+    
+    /// 通过索引得到值
+    ///
+    /// 若块不为空，返回Some
+    ///
+    /// # Panics
+    /// 越界访问时panic
+    pub fn unchecked_get(&self,idx: usize) -> Option<V> {
+        match self.items[idx] {
+            RawField::Thing(ref t) => Some(t.1),
+            _ => None
         }
     }
     
