@@ -323,7 +323,7 @@ where
     /// 越界访问时panic
     ///
     /// 指定块为空时panic
-    pub(crate) fn unchecked_get(&self, idx: usize) -> V {
+    pub fn unchecked_get(&self, idx: usize) -> V {
         match self.items[idx] {
             RawField::Thing(ref t) => t.1,
             _ => panic!("Called `RawFieldSet::unchecked_get()` on a empty field")
@@ -468,7 +468,7 @@ where
     /// 索引越界时panic
     ///
     /// 指定块为空时panic
-    pub(crate) fn unchecked_replace_index(&mut self, idx: usize, value: V) -> V
+    pub fn unchecked_replace_index(&mut self, idx: usize, value: V) -> V
     where
         V: Mul<usize, Output = V> + std::fmt::Debug,
     {
@@ -587,7 +587,7 @@ where
     ///
     /// # Panics
     /// 索引越界时panic
-    pub(crate) fn unchecked_remove_index(&mut self, idx: usize) -> V {
+    pub fn unchecked_remove_index(&mut self, idx: usize) -> V {
         if let Ok(v) = self.remove_index_in(idx) {
             v
         } else {
