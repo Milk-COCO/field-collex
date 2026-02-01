@@ -1,3 +1,4 @@
+use std::hash::Hash;
 use std::ops::{Deref, DerefMut, Div, Sub};
 use num_traits::real::Real;
 use span_core::Span;
@@ -21,7 +22,8 @@ where
 ///
 pub struct RawFieldCollex<K,V,F>
 where
-    K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Sized + Real ,
+    K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Sized + Real,
+    K: Hash + Eq,
     F: Fn(&V) -> K
 {
     map: RawFieldMap<K,V>,
@@ -31,6 +33,7 @@ where
 impl<K,V> RawFieldCollex<K,V,fn(&V) -> K>
 where
     K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Sized + Real,
+    K: Hash + Eq,
     V: CollexValue<K>,
 {
     pub fn new(span: Span<K>, unit: K) -> Result<Self,(Span<K>,K)> {
@@ -52,6 +55,7 @@ where
 impl<K,V,F,IE> RawFieldCollex<K,V,F>
 where
     K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize,Error=IE> + Sized + Real,
+    K: Hash + Eq,
     F: Fn(&V) -> K
 {
     pub fn with_picker(span: Span<K>, unit: K, picker: F) -> Result<Self,(Span<K>,K)> {
@@ -87,6 +91,7 @@ where
 impl<K,V,F> Deref for RawFieldCollex<K,V,F>
 where
     K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Sized + Real ,
+    K: Hash + Eq,
     F: Fn(&V) -> K
 {
     type Target = RawFieldMap<K,V>;
@@ -100,6 +105,7 @@ where
 impl<K,V,F> DerefMut for RawFieldCollex<K,V,F>
 where
     K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Sized + Real ,
+    K: Hash + Eq,
     F: Fn(&V) -> K
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
