@@ -4,7 +4,6 @@ use std::mem;
 use std::ops::*;
 use std::vec::Vec;
 use thiserror::Error;
-use crate::raw::local::set::ReplaceIndexRawFieldSetError::OutOfField;
 
 /// 一个块。详见 具体容器类型 。
 ///
@@ -67,6 +66,47 @@ where V:Copy
     
     pub fn next_from(tuple: &(usize, V)) -> Self {
         Self::Next(tuple.0)
+    }
+}
+
+pub(crate) type FindMatcherResult<T> = Result<T, FindMatcherRawFieldSetError>;
+
+#[derive(Error, Debug)]
+pub(crate) enum FindMatcherRawFieldSetError {
+    #[error("无匹配的数据")]
+    CannotFind,
+    #[error("当前无数据可查询")]
+    Empty,
+}
+
+impl<I> From<FindMatcherRawFieldSetError> for FindRawFieldSetError<I>{
+    fn from(value: FindMatcherRawFieldSetError) -> Self {
+        match value { 
+            FindMatcherRawFieldSetError::CannotFind => {Self::CannotFind}
+            FindMatcherRawFieldSetError::Empty => {Self::Empty}
+        }
+    }
+}
+
+pub(crate) type GetIndexResult<T,I> = Result<T, GetIndexRawFieldSetError<I>>;
+
+#[derive(Error, Debug)]
+pub enum GetIndexRawFieldSetError<I> {
+    #[error(transparent)]
+    IntoError(I),
+    #[error("目标值超出了当前RawFieldSet的span范围")]
+    OutOfSpan,
+    #[error("当前无数据可查询")]
+    Empty,
+}
+
+impl<I> From<GetIndexRawFieldSetError<I>> for FindRawFieldSetError<I>{
+    fn from(value: GetIndexRawFieldSetError<I>) -> Self {
+        match value {
+            GetIndexRawFieldSetError::IntoError(ie) => {Self::IntoError(ie)}
+            GetIndexRawFieldSetError::OutOfSpan => {Self::OutOfSpan}
+            GetIndexRawFieldSetError::Empty => {Self::Empty}
+        }
     }
 }
 
@@ -580,7 +620,6 @@ where
         }
     }
     
-    
     /// 用索引指定清空块，但无法清空时panic
     ///
     /// 返回原值。
@@ -595,116 +634,6 @@ where
         }
     }
     
-    /// find通用前置检查，返回target对应索引
-    pub(crate) fn find_checker(
-        &self,
-        target: V,
-    ) -> FindResult<usize, IE> {
-        use FindRawFieldSetError::*;
-        let span = &self.span;
-        if !span.contains(&target) { return Err(OutOfSpan); }
-        let items = &self.items;
-        let len = items.len();
-        if len == 0 { return Err(Empty); }
-        
-        Ok(self.idx_of(target).map_err(IntoError)?.min(len - 1))
-    }
-    
-    /// 通用底层查找核心
-    ///
-    /// # 参数
-    /// - target: 查找目标值
-    /// - matcher: 字段匹配器，解耦左右查找的字段匹配逻辑，入参为数据数组+索引，返回匹配的(idx, V)
-    /// - cmp: 匹配判定规则  | (当前K, 目标K) -> bool | true = 命中当前项，直接返回V
-    /// - lmt: 边界兜底规则  | (当前索引, 数组长度) -> bool | true = 触达边界，返回None
-    /// - next: 索引跳转规则 | (当前索引) -> usize | 返回查找目标索引
-    ///
-    /// 因为查找是O(1)所以暂不使用迭代器
-    pub(crate) fn find_in(
-        &self,
-        target: V,
-        matcher: impl Fn(&Self, &RawField<V>) -> FindResult<(usize, V), IE>,
-        cmp: impl FnOnce(&V,&V) -> bool,
-        lmt: impl FnOnce(usize,usize) -> bool,
-        next: impl FnOnce(usize) -> usize,
-    ) -> FindResult<V,IE>
-    {
-        use FindRawFieldSetError::*;
-        
-        let idx = self.find_checker(target)?;
-        let items = &self.items;
-        let len = items.len();
-        let current = matcher(self,&items[idx])?;
-        
-        Ok(if cmp(&current.1, &target) {
-            current.1
-        } else {
-            if lmt(idx, len) { return Err(CannotFind); }
-            let next = matcher(self,&items[next(idx)])?;
-            next.1
-        })
-    }
-    
-    pub(crate) fn find_index_in(
-        &self,
-        target: V,
-        matcher: impl Fn(&Self, &RawField<V>) -> FindResult<(usize, V), IE>,
-        cmp: impl FnOnce(&V,&V) -> bool,
-        lmt: impl FnOnce(usize,usize) -> bool,
-        next: impl FnOnce(usize) -> usize,
-    ) -> FindResult<usize, IE>
-    {
-        use FindRawFieldSetError::*;
-        let idx = self.find_checker(target)?;
-        let items = &self.items;
-        let len = items.len();
-        let current = matcher(self,&items[idx])?;
-        
-        Ok(if cmp(&current.1, &target) {
-            idx
-        } else {
-            if lmt(idx, len) { return Err(CannotFind); }
-            next(idx)
-        })
-    }
-    
-    pub(crate) fn matcher_l(this: &Self, field: &RawField<V>) -> FindResult<(usize, V), IE> {
-        use FindRawFieldSetError::*;
-        Ok(match field {
-            RawField::Thing(thing)
-            =>  (thing.0,thing.1),
-            RawField::Prev(fount)
-            | RawField::Among(fount, _)
-            => {
-                // fount必然是Thing。因为本来就是存的Thing啊。
-                let thing = this.items[*fount].as_thing();
-                (thing.0,thing.1)
-            }
-            RawField::Next(_)
-            => return Err(CannotFind),
-            RawField::Void
-            => return Err(Empty),
-        })
-    }
-    
-    pub(crate) fn matcher_r(this: &Self, field: &RawField<V>) -> FindResult<(usize, V), IE> {
-        use FindRawFieldSetError::*;
-        Ok(match field {
-            RawField::Thing(thing)
-            =>  (thing.0,thing.1),
-            RawField::Prev(_)
-            => return Err(CannotFind),
-            RawField::Next(next)
-            | RawField::Among(_, next)
-            => {
-                // next必然是Thing。因为本来就是存的Thing啊。
-                let thing = this.items[*next].as_thing();
-                (thing.0,thing.1)
-            }
-            RawField::Void
-            => return Err(Empty),
-        })
-    }
     
     /// 找到最近的小于等于 target 的值
     ///
@@ -800,5 +729,123 @@ where
             |idx,len| idx == len-1,
             |idx| idx+1
         )
+    }
+    
+    /// 通用前置检查。
+    ///
+    /// 获取值对应的索引。
+    ///
+    pub fn get_index(
+        &self,
+        target: V,
+    ) -> GetIndexResult<usize, IE> {
+        use GetIndexRawFieldSetError::*;
+        let span = &self.span;
+        if !span.contains(&target) { return Err(OutOfSpan); }
+        let items = &self.items;
+        let len = items.len();
+        if len == 0 { return Err(Empty); }
+        
+        Ok(self.idx_of(target).map_err(IntoError)?.min(len - 1))
+    }
+    
+    /// 通用底层查找核心
+    ///
+    /// # 参数
+    /// - target: 查找目标值
+    /// - matcher: 字段匹配器，解耦左右查找的字段匹配逻辑，入参为数据数组+索引，返回匹配的(idx, V)
+    /// - cmp: 匹配判定规则  | (当前K, 目标K) -> bool | true = 命中当前项，直接返回V
+    /// - lmt: 边界兜底规则  | (当前索引, 数组长度) -> bool | true = 触达边界，返回None
+    /// - next: 索引跳转规则 | (当前索引) -> usize | 返回查找目标索引
+    ///
+    /// 因为查找是O(1)所以暂不使用迭代器
+    pub(crate) fn find_in(
+        &self,
+        target: V,
+        matcher: impl Fn(&Self, &RawField<V>) -> FindMatcherResult<(usize, V)>,
+        cmp: impl FnOnce(&V,&V) -> bool,
+        lmt: impl FnOnce(usize,usize) -> bool,
+        next: impl FnOnce(usize) -> usize,
+    ) -> FindResult<V,IE>
+    {
+        use FindRawFieldSetError::*;
+        
+        let idx = self.get_index(target)
+            .map_err(Into::<FindRawFieldSetError<IE>>::into)?;
+        let items = &self.items;
+        let len = items.len();
+        let current = matcher(self,&items[idx])
+            .map_err(Into::<FindRawFieldSetError<IE>>::into)?;
+        
+        Ok(if cmp(&current.1, &target) {
+            current.1
+        } else {
+            if lmt(idx, len) { return Err(CannotFind); }
+            let next = matcher(self,&items[next(idx)])?;
+            next.1
+        })
+    }
+    
+    pub(crate) fn find_index_in(
+        &self,
+        target: V,
+        matcher: impl Fn(&Self, &RawField<V>) -> FindMatcherResult<(usize, V)>,
+        cmp: impl FnOnce(&V,&V) -> bool,
+        lmt: impl FnOnce(usize,usize) -> bool,
+        next: impl FnOnce(usize) -> usize,
+    ) -> FindResult<usize, IE>
+    {
+        use FindRawFieldSetError::*;
+        let idx = self.get_index(target)
+            .map_err(Into::<FindRawFieldSetError<IE>>::into)?;
+        let items = &self.items;
+        let len = items.len();
+        let current = matcher(self,&items[idx])
+            .map_err(Into::<FindRawFieldSetError<IE>>::into)?;
+        
+        Ok(if cmp(&current.1, &target) {
+            idx
+        } else {
+            if lmt(idx, len) { return Err(CannotFind); }
+            next(idx)
+        })
+    }
+    
+    pub(crate) fn matcher_l(this: &Self, field: &RawField<V>) -> FindMatcherResult<(usize, V)> {
+        use FindMatcherRawFieldSetError::*;
+        Ok(match field {
+            RawField::Thing(thing)
+            =>  (thing.0,thing.1),
+            RawField::Prev(fount)
+            | RawField::Among(fount, _)
+            => {
+                // fount必然是Thing。因为本来就是存的Thing啊。
+                let thing = this.items[*fount].as_thing();
+                (thing.0,thing.1)
+            }
+            RawField::Next(_)
+            => return Err(CannotFind),
+            RawField::Void
+            => return Err(Empty),
+        })
+    }
+    
+    pub(crate) fn matcher_r(this: &Self, field: &RawField<V>) -> FindMatcherResult<(usize, V)> {
+        use FindMatcherRawFieldSetError::*;
+        Ok(match field {
+            RawField::Thing(thing)
+            =>  (thing.0,thing.1),
+            RawField::Prev(_)
+            => return Err(CannotFind),
+            RawField::Next(next)
+            | RawField::Among(_, next)
+            => {
+                // next必然是Thing。因为本来就是存的Thing啊。
+                let thing = this.items[*next].as_thing();
+                (thing.0,thing.1)
+            }
+            RawField::Void
+            => return Err(Empty),
+        })
     }
 }
