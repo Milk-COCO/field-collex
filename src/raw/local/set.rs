@@ -261,6 +261,8 @@ where
     }
     
     /// 计算指定值对应的块索引
+    ///
+    /// Err是IntoError
     #[inline(always)]
     pub(crate) fn idx_of(&self, value: V) -> Result<usize, IE> {
         ((value - *self.span.start()) / self.unit).try_into()
@@ -281,6 +283,13 @@ where
             };
             self.items.resize(idx+1,filler);
         }
+    }
+    
+    /// 查找对应值是否存在
+    ///
+    /// Err为IntoError
+    pub fn contains(&self, value: V) -> Result<bool,IE> {
+        Ok(matches!(self.items[self.idx_of(value)?], RawField::Thing((_,k)) if k == value))
     }
     
     /// 通过索引得到值
