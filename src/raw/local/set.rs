@@ -4,6 +4,7 @@ use std::mem;
 use std::ops::*;
 use std::vec::Vec;
 use thiserror::Error;
+use crate::raw::local::set::ReplaceIndexRawFieldSetError::OutOfField;
 
 /// 一个块。详见 具体容器类型 。
 ///
@@ -89,6 +90,8 @@ pub(crate) type ReplaceIndexResult<T> = Result<T, ReplaceIndexRawFieldSetError>;
 pub enum ReplaceIndexRawFieldSetError {
     #[error("指定的块为空块")]
     EmptyField,
+    #[error("提供的值不属于此区间")]
+    OutOfField,
 }
 
 
@@ -327,7 +330,7 @@ where
         }
     }
     
-    // 辅助函数：执行插入/替换后的前后更新逻辑
+    /// 辅助函数：执行插入/替换后的前后更新逻辑
     pub(crate) fn try_insert_in(
         &mut self,
         idx: usize,
@@ -420,7 +423,10 @@ where
     /// 用索引指定替换块
     ///
     /// 成功则返回其原值
-    pub fn replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V> {
+    pub fn replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V>
+    where
+        V: Mul<usize, Output = V>,
+    {
         use ReplaceIndexRawFieldSetError::*;
         
         let items = &mut self.items;
@@ -437,8 +443,15 @@ where
     ///
     /// # Panics
     /// 索引越界时panic
-    pub(crate) fn replace_index_in(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V> {
+    pub(crate) fn replace_index_in(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V>
+    where
+        V: Mul<usize, Output = V>,
+    {
         use ReplaceIndexRawFieldSetError::*;
+        
+        if !(self.unit*idx..self.unit*(idx+1)).contains(&value) {
+            return Err(OutOfField);
+        }
         
         if let RawField::Thing(ref mut thing) = self.items[idx] {
             Ok(mem::replace(&mut (thing.1),value))
@@ -455,7 +468,17 @@ where
     /// 索引越界时panic
     ///
     /// 指定块为空时panic
-    pub(crate) fn unchecked_replace_index(&mut self, idx: usize, value: V) -> V {
+    pub(crate) fn unchecked_replace_index(&mut self, idx: usize, value: V) -> V
+    where
+        V: Mul<usize, Output = V> + std::fmt::Debug,
+    {
+        let range = self.unit*idx..self.unit*(idx+1);
+        if !range.contains(&value) {
+            panic!("Called `RawField::unchecked_replace_index()` with value '{value:?}' cannot be in field {idx} (out of {range:?})")
+        }
+        // 提示编译器这个range后面不再用到
+        drop(range);
+        
         if let RawField::Thing(ref mut thing) = self.items[idx] {
             mem::replace(&mut (thing.1),value)
         } else {
