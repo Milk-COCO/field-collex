@@ -83,12 +83,10 @@ pub enum FindRawFieldSetError<I> {
     Empty,
 }
 
-pub(crate) type ReplaceIndexResult<T,I> = Result<T, ReplaceIndexRawFieldSetError<I>>;
+pub(crate) type ReplaceIndexResult<T> = Result<T, ReplaceIndexRawFieldSetError>;
 
 #[derive(Error, Debug)]
-pub enum ReplaceIndexRawFieldSetError<I> {
-    #[error(transparent)]
-    IntoError(I),
+pub enum ReplaceIndexRawFieldSetError {
     #[error("指定的块为空块")]
     EmptyField,
 }
@@ -301,16 +299,31 @@ where
         Some(thing.1)
     }
     
-    /// 通过索引得到值
+    /// 通过索引得到值，但不进行索引检查
     ///
     /// 若块不为空，返回Some
     ///
     /// # Panics
     /// 越界访问时panic
-    pub fn unchecked_get(&self,idx: usize) -> Option<V> {
+    pub(crate) fn get_in(&self, idx: usize) -> Option<V> {
         match self.items[idx] {
             RawField::Thing(ref t) => Some(t.1),
             _ => None
+        }
+    }
+    
+    /// 通过索引得到值，但无法获取时panic
+    ///
+    /// 若块不为空，返回Some
+    ///
+    /// # Panics
+    /// 越界访问时panic
+    ///
+    /// 指定块为空时panic
+    pub(crate) fn unchecked_get(&self, idx: usize) -> V {
+        match self.items[idx] {
+            RawField::Thing(ref t) => t.1,
+            _ => panic!("Called `RawFieldSet::unchecked_get()` on a empty field")
         }
     }
     
@@ -407,10 +420,24 @@ where
     /// 用索引指定替换块
     ///
     /// 成功则返回其原值
+    pub fn replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V> {
+        use ReplaceIndexRawFieldSetError::*;
+        
+        let items = &mut self.items;
+        let len = items.len();
+        
+        if idx>=len { return Err(EmptyField) }
+        
+        self.replace_index_in(idx, value)
+    }
+    
+    /// 用索引指定替换块，但不进行索引检查
+    ///
+    /// 成功则返回其原值
     ///
     /// # Panics
     /// 索引越界时panic
-    pub fn unchecked_replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V,IE> {
+    pub(crate) fn replace_index_in(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V> {
         use ReplaceIndexRawFieldSetError::*;
         
         if let RawField::Thing(ref mut thing) = self.items[idx] {
@@ -420,18 +447,36 @@ where
         }
     }
     
-    /// 用索引指定替换块
+    /// 用索引指定替换块，但无法替换时panic
     ///
-    /// 成功则返回其原值
-    pub fn replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V,IE> {
-        use ReplaceIndexRawFieldSetError::*;
+    /// 返回其原值
+    ///
+    /// # Panics
+    /// 索引越界时panic
+    ///
+    /// 指定块为空时panic
+    pub(crate) fn unchecked_replace_index(&mut self, idx: usize, value: V) -> V {
+        if let RawField::Thing(ref mut thing) = self.items[idx] {
+            mem::replace(&mut (thing.1),value)
+        } else {
+            panic!("Called `RawField::unchecked_replace_index()` on a empty field")
+        }
+    }
+    
+    
+    /// 用索引指定清空块。
+    ///
+    /// 若指定块非空，返回内部值。
+    pub fn remove_index(&mut self, idx: usize) -> RemoveIndexResult<V>
+    {
+        use RemoveIndexRawFieldSetError::*;
         
         let items = &mut self.items;
         let len = items.len();
         
         if idx>=len { return Err(EmptyField) }
         
-        self.unchecked_replace_index(idx,value)
+        self.remove_index_in(idx)
     }
     
     /// 用索引指定清空块，但不进行索引检查
@@ -440,7 +485,7 @@ where
     ///
     /// # Panics
     /// 索引越界时panic
-    pub fn unchecked_remove_index(&mut self, idx: usize) -> RemoveIndexResult<V> {
+    pub(crate) fn remove_index_in(&mut self, idx: usize) -> RemoveIndexResult<V> {
         use RemoveIndexRawFieldSetError::*;
         
         let items = &mut self.items;
@@ -512,19 +557,19 @@ where
         }
     }
     
-    /// 用索引指定清空块。
+    
+    /// 用索引指定清空块，但无法清空时panic
     ///
-    /// 若指定块非空，返回内部值。
-    pub fn remove_index(&mut self, idx: usize) -> RemoveIndexResult<V>
-    {
-        use RemoveIndexRawFieldSetError::*;
-        
-        let items = &mut self.items;
-        let len = items.len();
-        
-        if idx>=len { return Err(EmptyField) }
-        
-        self.unchecked_remove_index(idx)
+    /// 返回原值。
+    ///
+    /// # Panics
+    /// 索引越界时panic
+    pub(crate) fn unchecked_remove_index(&mut self, idx: usize) -> V {
+        if let Ok(v) = self.remove_index_in(idx) {
+            v
+        } else {
+            panic!("Called `RawField::unchecked_remove_index()` on a empty field")
+        }
     }
     
     /// find通用前置检查，返回target对应索引
