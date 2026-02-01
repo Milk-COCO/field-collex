@@ -129,9 +129,10 @@ pub struct RawFieldSet<V>
 where
     V: Div<V,Output= V> + Sub<V,Output= V> + TryInto<usize> + Sized + Real,
 {
-    span: Span<V>,
-    unit: V,
-    items: Vec<RawField<V>>,
+    pub(crate) span: Span<V>,
+    pub(crate) unit: V,
+    pub(crate) items: Vec<RawField<V>>,
+    
 }
 
 impl<V,IE> RawFieldSet<V>
