@@ -100,15 +100,35 @@ pub enum GetIndexRawFieldSetError<I> {
     Empty,
 }
 
-impl<I> From<GetIndexRawFieldSetError<I>> for FindRawFieldSetError<I>{
-    fn from(value: GetIndexRawFieldSetError<I>) -> Self {
-        match value {
-            GetIndexRawFieldSetError::IntoError(ie) => {Self::IntoError(ie)}
-            GetIndexRawFieldSetError::OutOfSpan => {Self::OutOfSpan}
-            GetIndexRawFieldSetError::Empty => {Self::Empty}
+macro_rules! impl_from_get_index_err {
+    ($err: ident) => {
+        impl<I> From<GetIndexRawFieldSetError<I>> for $err<I>{
+            fn from(value: GetIndexRawFieldSetError<I>) -> Self {
+                match value {
+                    GetIndexRawFieldSetError::IntoError(ie) => {Self::IntoError(ie)}
+                    GetIndexRawFieldSetError::OutOfSpan => {Self::OutOfSpan}
+                    GetIndexRawFieldSetError::Empty => {Self::Empty}
+                }
+            }
         }
-    }
+    };
+    ($err: ident, $empty: ident) => {
+        impl<I> From<GetIndexRawFieldSetError<I>> for $err<I>{
+            fn from(value: GetIndexRawFieldSetError<I>) -> Self {
+                match value {
+                    GetIndexRawFieldSetError::IntoError(ie) => {Self::IntoError(ie)}
+                    GetIndexRawFieldSetError::OutOfSpan => {Self::OutOfSpan}
+                    GetIndexRawFieldSetError::Empty => {Self::$empty}
+                }
+            }
+        }
+    };
 }
+
+impl_from_get_index_err!(FindRawFieldSetError);
+impl_from_get_index_err!(ReplaceRawFieldSetError, EmptyField);
+impl_from_get_index_err!(RemoveRawFieldSetError, EmptyField);
+
 
 pub(crate) type FindResult<T,I> = Result<T, FindRawFieldSetError<I>>;
 
@@ -142,6 +162,55 @@ pub enum RemoveIndexRawFieldSetError {
     #[error("指定的块已为空块")]
     EmptyField,
 }
+
+
+pub(crate) type ReplaceResult<T,I> = Result<T, ReplaceRawFieldSetError<I>>;
+
+#[derive(Error, Debug)]
+pub enum ReplaceRawFieldSetError<I> {
+    #[error(transparent)]
+    IntoError(I),
+    #[error("提供的值超出了当前RawFieldSet的span范围")]
+    OutOfSpan,
+    #[error("无匹配的数据")]
+    CannotFind,
+    #[error("指定的块为空块")]
+    EmptyField,
+    #[error("提供的值不属于此区间")]
+    OutOfField,
+}
+
+impl<I> From<ReplaceIndexRawFieldSetError> for ReplaceRawFieldSetError<I> {
+    fn from(value: ReplaceIndexRawFieldSetError) -> Self {
+        match value {
+            ReplaceIndexRawFieldSetError::EmptyField => {Self::EmptyField}
+            ReplaceIndexRawFieldSetError::OutOfField => {Self::OutOfField}
+        }
+    }
+}
+
+pub(crate) type RemoveResult<T,I> = Result<T, RemoveRawFieldSetError<I>>;
+
+#[derive(Error, Debug)]
+pub enum RemoveRawFieldSetError<I> {
+    #[error(transparent)]
+    IntoError(I),
+    #[error("目标值超出了当前RawFieldSet的span范围")]
+    OutOfSpan,
+    #[error("无匹配的数据")]
+    CannotFind,
+    #[error("指定的块已为空块")]
+    EmptyField,
+}
+
+impl<I> From<RemoveIndexRawFieldSetError> for RemoveRawFieldSetError<I> {
+    fn from(value: RemoveIndexRawFieldSetError) -> Self {
+        match value {
+            RemoveIndexRawFieldSetError::EmptyField => {Self::EmptyField}
+        }
+    }
+}
+
 
 pub(crate) type TryInsertResult<I> = Result<(), TryInsertRawFieldSetError<I>>;
 #[derive(Error, Debug)]
@@ -635,6 +704,65 @@ where
     }
     
     
+    /// 替换指定值对应的指定块
+    ///
+    /// 成功则返回其原值
+    pub fn replace(&mut self, value: V) -> ReplaceResult<V,IE>
+    where
+        V: Mul<usize, Output = V>,
+    {
+        let idx = self.get_index(value)
+            .map_err(Into::<ReplaceRawFieldSetError<IE>>::into)?;
+        
+        self.replace_index_in(idx,value)
+            .map_err(Into::<ReplaceRawFieldSetError<IE>>::into)
+    }
+    
+    /// 替换指定值对应的指定块，但无法替换时panic
+    ///
+    /// 返回其原值
+    ///
+    /// # Panics
+    /// 见[`unchecked_get_index`]和[`unchecked_replace_index`]
+    pub fn unchecked_replace(&mut self, value: V) -> V
+    where
+        V: Mul<usize, Output = V> + std::fmt::Debug,
+        IE: std::fmt::Debug,
+    {
+        let idx = self.unchecked_get_index(value);
+        
+        self.unchecked_replace_index(idx,value)
+    }
+    
+    
+    /// 用值清空对应块。
+    ///
+    /// 若指定块非空，返回内部值。
+    pub fn remove(&mut self, value: V) -> RemoveResult<V,IE>
+    {
+        let idx = self.get_index(value)
+            .map_err(Into::<RemoveRawFieldSetError<IE>>::into)?;
+        
+        self.remove_index_in(idx)
+            .map_err(Into::<RemoveRawFieldSetError<IE>>::into)
+    }
+    
+    /// 用值指定清空对应块，但无法清空时panic
+    ///
+    /// 返回原值。
+    ///
+    /// # Panics
+    /// 见[`unchecked_get_index`]和[`unchecked_remove_index`]
+    pub fn unchecked_remove(&mut self, value: V) -> V
+    where
+        IE: std::fmt::Debug,
+    {
+        let idx = self.unchecked_get_index(value);
+        
+        self.unchecked_remove_index(idx)
+    }
+    
+    
     /// 找到最近的小于等于 target 的值
     ///
     pub fn find_le(&self, target: V) -> FindResult<V, IE> {
@@ -747,6 +875,29 @@ where
         if len == 0 { return Err(Empty); }
         
         Ok(self.idx_of(target).map_err(IntoError)?.min(len - 1))
+    }
+    
+    
+    /// 通用前置检查。
+    ///
+    /// 获取值对应的索引。
+    ///
+    /// # Panics
+    /// 详见[`GetIndexRawFieldSetError`]
+    pub fn unchecked_get_index(
+        &self,
+        target: V,
+    ) -> usize
+    where
+        IE: std::fmt::Debug,
+    {
+        let span = &self.span;
+        if !span.contains(&target) { panic!("Called `RawFieldSet::unchecked_get_index()` on a value is not contained in the span"); }
+        let items = &self.items;
+        let len = items.len();
+        if len == 0 { panic!("Called `RawFieldSet::unchecked_get_index()` on a empty set"); }
+        
+        self.idx_of(target).unwrap().min(len - 1)
     }
     
     /// 通用底层查找核心
