@@ -10,7 +10,8 @@ use ahash::AHashMap;
 use std::ops::{Div, Mul, Sub};
 use num_traits::real::Real;
 use span_core::Span;
-use super::set::{self, *};
+pub use super::set::{InsertRawFieldSetError, TryInsertRawFieldSetError};
+use super::set::{self, RawField, RawFieldSet};
 
 pub(crate) type FindResult<T> = Result<T, FindRawFieldMapError>;
 
@@ -256,7 +257,7 @@ where
     /// 用索引指定替换块的键
     ///
     /// 成功则返回其原键
-    pub fn replace_key_index(&mut self, idx: usize, key: K) -> super::set::ReplaceIndexResult<K>
+    pub fn replace_key_index(&mut self, idx: usize, key: K) -> set::ReplaceIndexResult<K>
     where
         K: Mul<usize, Output = K>,
     {
@@ -269,7 +270,7 @@ where
     ///
     /// # Panics
     /// 索引越界时panic
-    pub(crate) fn replace_key_index_in(&mut self, idx: usize, key: K) -> super::set::ReplaceIndexResult<K>
+    pub(crate) fn replace_key_index_in(&mut self, idx: usize, key: K) -> set::ReplaceIndexResult<K>
     where
         K: Mul<usize, Output = K>,
     {
@@ -340,6 +341,44 @@ where
         }
     }
     
+    /// 用索引指定清空块。
+    ///
+    /// 若指定块非空，返回(键,值)。
+    pub fn remove_index(&mut self, idx: usize) -> set::RemoveIndexResult<(K,V)> {
+        let k = self.keys.remove_index(idx)?;
+        // 模块文档脚注1
+        let v = self.values.remove(&k).unwrap();
+        Ok((k,v))
+    }
+    
+    
+    /// 用索引指定清空块，但不进行索引检查
+    ///
+    /// 若指定块非空，返回(键,值)。
+    ///
+    /// # Panics
+    /// 索引越界时panic
+    pub fn remove_index_in(&mut self, idx: usize) -> set::RemoveIndexResult<(K,V)> {
+        let k = self.keys.remove_index_in(idx)?;
+        // 模块文档脚注1
+        let v = self.values.remove(&k).unwrap();
+        Ok((k,v))
+    }
+    
+    /// 用索引指定清空块，但无法清空时panic
+    ///
+    /// 返回原(键,值)。
+    ///
+    /// # Panics
+    /// 索引越界时panic
+    ///
+    /// 指定块为空时panic
+    pub fn unchecked_remove_index(&mut self, idx: usize) -> (K,V) {
+        let k = self.keys.unchecked_remove_index(idx);
+        // 模块文档脚注1
+        let v = self.values.remove(&k).unwrap();
+        (k,v)
+    }
     
     
     /// 用键指定块，将其键替换
@@ -372,5 +411,102 @@ where
         self.keys.unchecked_replace(key)
     }
     
-    pub fn remove
+    /// 用键清空对应块。
+    ///
+    /// 若指定块非空，返回原(键,值)。
+    pub fn remove(&mut self, key: K) -> set::RemoveResult<(K,V)> {
+        let k = self.keys.remove(key)?;
+        // 模块文档脚注1
+        let v = self.values.remove(&k).unwrap();
+        Ok((k,v))
+    }
+    
+    /// 用键清空对应块，但无法清空时panic
+    ///
+    /// 返回原(键,值)。
+    ///
+    /// # Panics
+    /// 同[`unchecked_get_index`] + [`unchecked_remove_index`]
+    pub fn unchecked_remove(&mut self, key: K) -> (K,V) {
+        let k = self.keys.unchecked_remove(key);
+        // 模块文档脚注1
+        let v = self.values.remove(&k).unwrap();
+        (k,v)
+    }
+    
+    
+    /// 找到最近的小于等于 target 的键，返回对应值的引用
+    ///
+    pub fn find_le(&self, target: K) -> set::FindResult<&V> {
+        let k = self.keys.find_le(target)?;
+        Ok(self.values.get(&k).unwrap())
+    }
+    
+    /// 找到最近的小于 target 的键，返回对应值的引用
+    ///
+    pub fn find_lt(&self, target: K) -> set::FindResult<&V> {
+        let k = self.keys.find_lt(target)?;
+        Ok(self.values.get(&k).unwrap())
+    }
+    
+    /// 找到最近的大于等于 target 的键，返回对应值的引用
+    ///
+    pub fn find_ge(&self, target: K) -> set::FindResult<&V> {
+        let k = self.keys.find_ge(target)?;
+        Ok(self.values.get(&k).unwrap())
+    }
+    
+    /// 找到最近的大于 target 的键，返回对应值的引用
+    ///
+    pub fn find_gt(&self, target: K) -> set::FindResult<&V> {
+        let k = self.keys.find_gt(target)?;
+        Ok(self.values.get(&k).unwrap())
+    }
+    
+    /// 找到最近的小于等于 target 的键，返回索引
+    ///
+    pub fn find_index_le(&self, target: K) -> set::FindResult<usize> {
+        self.keys.find_index_le(target)
+    }
+    
+    /// 找到最近的小于 target 的键，返回索引
+    ///
+    pub fn find_index_lt(&self, target: K) -> set::FindResult<usize> {
+        self.keys.find_index_lt(target)
+    }
+    
+    /// 找到最近的大于等于 target 的键，返回索引
+    ///
+    pub fn find_index_ge(&self, target: K) -> set::FindResult<usize> {
+        self.keys.find_index_ge(target)
+    }
+    
+    /// 找到最近的大于 target 的键，返回索引
+    ///
+    pub fn find_index_gt(&self, target: K) -> set::FindResult<usize> {
+        self.keys.find_index_gt(target)
+    }
+    
+    pub fn get_index(
+        &self,
+        target: K,
+    ) -> set::GetIndexResult<usize> 
+    {
+        self.keys.get_index(target)
+    }
+    
+    /// 计算指定值对应的块索引，但是带通用前置检查，但检查不通过时panic
+    ///
+    /// 获取值对应的索引。
+    ///
+    /// # Panics
+    /// 详见[`GetIndexRawFieldSetError`]
+    pub fn unchecked_get_index(
+        &self,
+        target: K,
+    ) -> usize
+    {
+        self.keys.unchecked_get_index(target)
+    }
+    
 }
