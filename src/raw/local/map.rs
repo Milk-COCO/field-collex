@@ -142,6 +142,47 @@ where
         })
     }
     
+    pub fn span(&self) -> &Span<K> {
+        &self.keys.span
+    }
+    
+    pub fn unit(&self) -> &K {
+        &self.keys.unit
+    }
+    
+    /// 返回最大块数量
+    ///
+    /// 若Span是无限区间，返回Ok(None) <br>
+    pub fn size(&self) -> Option<usize> {
+        self.keys.size()
+    }
+    
+    /// 返回已存在的块的数量
+    ///
+    /// 此值应小于等于最大块数量
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.keys.len()
+    }
+    
+    /// Returns the total number of elements the inner vector can hold without reallocating.
+    ///
+    /// 此值应小于等于最大块数量
+    pub fn capacity(&self) -> usize {
+        self.keys.capacity()
+    }
+    
+    /// 判断对应块是非空
+    pub fn is_thing(&self, idx: usize) -> bool {
+        self.keys.is_thing(idx)
+    }
+    
+    /// 查找对应键是否存在
+    ///
+    pub fn contains_key(&self, value: K) -> bool {
+        self.keys.contains(value)
+    }
+    
     /// 通过索引得到块值引用
     ///
     /// 若块不为空，返回Some
@@ -294,27 +335,4 @@ where
     }
     
     
-}
-
-impl<K,V> Deref for RawFieldMap<K,V>
-where
-    K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Sized + Real ,
-    K: Hash + Eq,
-{
-    type Target = RawFieldSet<K>;
-    
-    /// 只有一些方法并需要进行上层包装。比如插入相关。
-    fn deref(&self) -> &Self::Target {
-        &self.keys
-    }
-}
-
-impl<K,V> DerefMut for RawFieldMap<K,V>
-where
-    K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Sized + Real ,
-    K: Hash + Eq,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.keys
-    }
 }
