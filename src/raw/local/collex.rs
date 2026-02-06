@@ -2,11 +2,12 @@ use std::hash::Hash;
 use std::ops::{Deref, DerefMut, Div, Sub};
 use num_traits::real::Real;
 use span_core::Span;
-use crate::raw::local::map::*;
+pub use super::map::InsertRawFieldMapError;
+use crate::raw::local::map::{self, RawFieldMap};
 
 pub trait CollexValue<K>
 where
-    K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Sized + Real,
+    K: Div<K,Output=K> + Sub<K,Output=K> + Into<usize> + Sized + Real,
 {
     fn pick(&self) -> K;
 }
@@ -22,7 +23,7 @@ where
 ///
 pub struct RawFieldCollex<K,V,F>
 where
-    K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Sized + Real,
+    K: Div<K,Output=K> + Sub<K,Output=K> + Into<usize> + Sized + Real,
     K: Hash + Eq,
     F: Fn(&V) -> K
 {
@@ -32,7 +33,7 @@ where
 
 impl<K,V> RawFieldCollex<K,V,fn(&V) -> K>
 where
-    K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Sized + Real,
+    K: Div<K,Output=K> + Sub<K,Output=K> + Into<usize> + Sized + Real,
     K: Hash + Eq,
     V: CollexValue<K>,
 {
@@ -52,9 +53,9 @@ where
 }
 
 
-impl<K,V,F,IE> RawFieldCollex<K,V,F>
+impl<K,V,F> RawFieldCollex<K,V,F>
 where
-    K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize,Error=IE> + Sized + Real,
+    K: Div<K,Output=K> + Sub<K,Output=K> + Into<usize> + Sized + Real,
     K: Hash + Eq,
     F: Fn(&V) -> K
 {
@@ -72,25 +73,25 @@ where
         })
     }
     
-    pub fn try_insert(&mut self, value: V) -> super::map::TryInsertResult<V, IE> {
+    pub fn try_insert(&mut self, value: V) -> map::TryInsertResult<V> {
         self.map.try_insert((self.picker)(&value),value)
     }
     
     /// 替换时仅返回V。
-    pub fn insert(&mut self, value: V) -> Result<Option<V>, InsertRawFieldMapError<V,IE>>{
+    pub fn insert(&mut self, value: V) -> Result<Option<V>, InsertRawFieldMapError<V>>{
         self.map.insert((self.picker)(&value), value).map(|o| o.map(|v| v.1))
     }
     
     /// 替换时保留返回K。
     /// > 但好像没什么用
-    pub fn insert_key_value(&mut self, value: V) -> InsertResult<K, V, IE>{
+    pub fn insert_key_value(&mut self, value: V) -> map::InsertResult<K, V>{
         self.map.insert((self.picker)(&value), value)
     }
 }
 
 impl<K,V,F> Deref for RawFieldCollex<K,V,F>
 where
-    K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Sized + Real ,
+    K: Div<K,Output=K> + Sub<K,Output=K> + Into<usize> + Sized + Real ,
     K: Hash + Eq,
     F: Fn(&V) -> K
 {
@@ -104,7 +105,7 @@ where
 
 impl<K,V,F> DerefMut for RawFieldCollex<K,V,F>
 where
-    K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Sized + Real ,
+    K: Div<K,Output=K> + Sub<K,Output=K> + Into<usize> + Sized + Real ,
     K: Hash + Eq,
     F: Fn(&V) -> K
 {
