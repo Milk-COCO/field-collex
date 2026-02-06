@@ -79,7 +79,7 @@ pub(crate) enum FindMatcherRawFieldSetError {
     Empty,
 }
 
-impl<I> From<FindMatcherRawFieldSetError> for FindRawFieldSetError<I>{
+impl From<FindMatcherRawFieldSetError> for FindRawFieldSetError{
     fn from(value: FindMatcherRawFieldSetError) -> Self {
         match value { 
             FindMatcherRawFieldSetError::CannotFind => {Self::CannotFind}
@@ -88,12 +88,10 @@ impl<I> From<FindMatcherRawFieldSetError> for FindRawFieldSetError<I>{
     }
 }
 
-pub(crate) type GetIndexResult<T,I> = Result<T, GetIndexRawFieldSetError<I>>;
+pub(crate) type GetIndexResult<T> = Result<T, GetIndexRawFieldSetError>;
 
 #[derive(Error, Debug)]
-pub enum GetIndexRawFieldSetError<I> {
-    #[error(transparent)]
-    IntoError(I),
+pub enum GetIndexRawFieldSetError {
     #[error("目标值超出了当前RawFieldSet的span范围")]
     OutOfSpan,
     #[error("当前无数据可查询")]
@@ -102,10 +100,9 @@ pub enum GetIndexRawFieldSetError<I> {
 
 macro_rules! impl_from_get_index_err {
     ($err: ident) => {
-        impl<I> From<GetIndexRawFieldSetError<I>> for $err<I>{
-            fn from(value: GetIndexRawFieldSetError<I>) -> Self {
+        impl From<GetIndexRawFieldSetError> for $err{
+            fn from(value: GetIndexRawFieldSetError) -> Self {
                 match value {
-                    GetIndexRawFieldSetError::IntoError(ie) => {Self::IntoError(ie)}
                     GetIndexRawFieldSetError::OutOfSpan => {Self::OutOfSpan}
                     GetIndexRawFieldSetError::Empty => {Self::Empty}
                 }
@@ -113,10 +110,9 @@ macro_rules! impl_from_get_index_err {
         }
     };
     ($err: ident, $empty: ident) => {
-        impl<I> From<GetIndexRawFieldSetError<I>> for $err<I>{
-            fn from(value: GetIndexRawFieldSetError<I>) -> Self {
+        impl From<GetIndexRawFieldSetError> for $err{
+            fn from(value: GetIndexRawFieldSetError) -> Self {
                 match value {
-                    GetIndexRawFieldSetError::IntoError(ie) => {Self::IntoError(ie)}
                     GetIndexRawFieldSetError::OutOfSpan => {Self::OutOfSpan}
                     GetIndexRawFieldSetError::Empty => {Self::$empty}
                 }
@@ -130,12 +126,10 @@ impl_from_get_index_err!(ReplaceRawFieldSetError, EmptyField);
 impl_from_get_index_err!(RemoveRawFieldSetError, EmptyField);
 
 
-pub(crate) type FindResult<T,I> = Result<T, FindRawFieldSetError<I>>;
+pub(crate) type FindResult<T> = Result<T, FindRawFieldSetError>;
 
 #[derive(Error, Debug)]
-pub enum FindRawFieldSetError<I> {
-    #[error(transparent)]
-    IntoError(I),
+pub enum FindRawFieldSetError {
     #[error("目标值超出了当前RawFieldSet的span范围")]
     OutOfSpan,
     #[error("无匹配的数据")]
@@ -164,12 +158,10 @@ pub enum RemoveIndexRawFieldSetError {
 }
 
 
-pub(crate) type ReplaceResult<T,I> = Result<T, ReplaceRawFieldSetError<I>>;
+pub(crate) type ReplaceResult<T> = Result<T, ReplaceRawFieldSetError>;
 
 #[derive(Error, Debug)]
-pub enum ReplaceRawFieldSetError<I> {
-    #[error(transparent)]
-    IntoError(I),
+pub enum ReplaceRawFieldSetError {
     #[error("提供的值超出了当前RawFieldSet的span范围")]
     OutOfSpan,
     #[error("无匹配的数据")]
@@ -180,7 +172,7 @@ pub enum ReplaceRawFieldSetError<I> {
     OutOfField,
 }
 
-impl<I> From<ReplaceIndexRawFieldSetError> for ReplaceRawFieldSetError<I> {
+impl From<ReplaceIndexRawFieldSetError> for ReplaceRawFieldSetError {
     fn from(value: ReplaceIndexRawFieldSetError) -> Self {
         match value {
             ReplaceIndexRawFieldSetError::EmptyField => {Self::EmptyField}
@@ -189,12 +181,10 @@ impl<I> From<ReplaceIndexRawFieldSetError> for ReplaceRawFieldSetError<I> {
     }
 }
 
-pub(crate) type RemoveResult<T,I> = Result<T, RemoveRawFieldSetError<I>>;
+pub(crate) type RemoveResult<T> = Result<T, RemoveRawFieldSetError>;
 
 #[derive(Error, Debug)]
-pub enum RemoveRawFieldSetError<I> {
-    #[error(transparent)]
-    IntoError(I),
+pub enum RemoveRawFieldSetError {
     #[error("目标值超出了当前RawFieldSet的span范围")]
     OutOfSpan,
     #[error("无匹配的数据")]
@@ -203,7 +193,7 @@ pub enum RemoveRawFieldSetError<I> {
     EmptyField,
 }
 
-impl<I> From<RemoveIndexRawFieldSetError> for RemoveRawFieldSetError<I> {
+impl From<RemoveIndexRawFieldSetError> for RemoveRawFieldSetError {
     fn from(value: RemoveIndexRawFieldSetError) -> Self {
         match value {
             RemoveIndexRawFieldSetError::EmptyField => {Self::EmptyField}
@@ -212,22 +202,18 @@ impl<I> From<RemoveIndexRawFieldSetError> for RemoveRawFieldSetError<I> {
 }
 
 
-pub(crate) type TryInsertResult<I> = Result<(), TryInsertRawFieldSetError<I>>;
+pub(crate) type TryInsertResult = Result<(), TryInsertRawFieldSetError>;
 #[derive(Error, Debug)]
-pub enum TryInsertRawFieldSetError<I> {
-    #[error(transparent)]
-    IntoError(I),
+pub enum TryInsertRawFieldSetError {
     #[error("Key超出了当前RawFieldSet的span范围")]
     OutOfSpan,
     #[error("Key对应块已存在元素")]
     AlreadyExists,
 }
 
-pub(crate) type InsertResult<V,I> = Result<Option<V>, InsertRawFieldSetError<I>>;
+pub(crate) type InsertResult<V> = Result<Option<V>, InsertRawFieldSetError>;
 #[derive(Error, Debug)]
-pub enum InsertRawFieldSetError<I> {
-    #[error(transparent)]
-    IntoError(I),
+pub enum InsertRawFieldSetError {
     #[error("Key超出了当前RawFieldSet的span范围")]
     OutOfSpan,
 }
@@ -237,7 +223,7 @@ pub enum InsertRawFieldSetError<I> {
 #[derive(Default, Debug)]
 pub struct RawFieldSet<V>
 where
-    V: Div<V,Output= V> + Sub<V,Output= V> + TryInto<usize> + Sized + Real,
+    V: Div<V,Output= V> + Sub<V,Output= V> + Into<usize> + Sized + Real,
 {
     pub(crate) span: Span<V>,
     pub(crate) unit: V,
@@ -245,9 +231,9 @@ where
     
 }
 
-impl<V,IE> RawFieldSet<V>
+impl<V> RawFieldSet<V>
 where
-    V: Div<V,Output= V> + Sub<V,Output= V> + TryInto<usize,Error=IE> + Sized + Real,
+    V: Div<V,Output= V> + Sub<V,Output= V> + Into<usize> + Sized + Real,
 {
     /// 提供span与unit，构建一个RawFieldSet
     ///
@@ -270,16 +256,12 @@ where
     ///
     /// span为Key的范围，unit为每个块的大小，同时也是每个块之间的间隔
     ///
-    /// 若unit为0、span为空、转换失败、capacity大于最大块数量，通过返回Err返还提供的数据
+    /// 若unit为0、span为空、capacity大于最大块数量，通过返回Err返还提供的数据
     pub fn with_capacity(span: Span<V>, unit: V, capacity: usize) -> Result<Self,(Span<V>, V)> {
         if unit.is_zero() || span.is_empty() ||
             match span.size(){
                 Ok(Some(size)) => {
-                    capacity >
-                        match (size / unit).ceil().try_into() {
-                            Ok(v) => {v}
-                            _ => return Err((span, unit))
-                        }
+                    capacity > (size / unit).ceil().into()
                 },
                 Ok(None) => {false}
                 _ => {return Err((span, unit));}
@@ -315,14 +297,13 @@ where
     
     /// 返回最大块数量
     ///
-    /// 若Span是无限区间，返回Ok(None) <br>
-    /// 若发生转换错误，返回Err
-    pub fn size(&self) -> Result<Option<usize>,IE> {
+    /// 若Span是无限区间，返回None
+    pub fn size(&self) -> Option<usize> {
         // 确保在创建时就不可能为空区间。详见那些构造函数
-        Ok(match self.span.size(){
-            Ok(Some(size)) => Some((size / self.unit).ceil().try_into() ? ),
+        match self.span.size(){
+            Ok(Some(size)) => Some((size / self.unit).ceil().into()),
             _ => None
-        })
+        }
     }
     
     /// 返回已存在的块的数量
@@ -373,10 +354,9 @@ where
     
     /// 计算指定值对应的块索引
     ///
-    /// Err是IntoError
     #[inline(always)]
-    pub(crate) fn idx_of(&self, value: V) -> Result<usize, IE> {
-        ((value - *self.span.start()) / self.unit).try_into()
+    pub(crate) fn idx_of(&self, value: V) -> usize {
+        ((value - *self.span.start()) / self.unit).into()
     }
     
     pub(crate) fn resize_to_idx(&mut self, idx: usize) {
@@ -398,9 +378,8 @@ where
     
     /// 查找对应值是否存在
     ///
-    /// Err为IntoError
-    pub fn contains(&self, value: V) -> Result<bool,IE> {
-        Ok(matches!(self.items[self.idx_of(value)?], RawField::Thing((_,k)) if k == value))
+    pub fn contains(&self, value: V) -> bool {
+        matches!(self.items[self.idx_of(value)], RawField::Thing((_,k)) if k == value)
     }
     
     /// 通过索引得到值
@@ -480,16 +459,12 @@ where
     /// 尝试插入值
     ///
     /// 插入失败会返回 [`TryInsertRawFieldSetError`]
-    pub fn try_insert(&mut self, value: V) -> TryInsertResult<IE> {
+    pub fn try_insert(&mut self, value: V) -> TryInsertResult {
         use TryInsertRawFieldSetError::*;
         let span = &self.span;
         if !span.contains(&value) { return Err(OutOfSpan) }
         
-        let idx = match self.idx_of(value){
-            Ok(v) => {v}
-            // 需要拿走所有权所以只能这么match
-            Err(e) => {return Err(IntoError(e));}
-        };
+        let idx = self.idx_of(value);
         
         if self.is_thing(idx) {return Err(AlreadyExists)};
         
@@ -505,12 +480,12 @@ where
     /// 若对应块已有值，新值将替换原值，返回Ok(Some(V))包裹原值。<br>
     /// 若无值，插入新值返回None。
     ///
-    pub fn insert(&mut self, value: V) -> InsertResult<V, IE>  {
+    pub fn insert(&mut self, value: V) -> InsertResult<V>  {
         use InsertRawFieldSetError::*;
         let span = &self.span;
         if !span.contains(&value) { return Err(OutOfSpan) }
         
-        let idx = self.idx_of(value).map_err(IntoError)?;
+        let idx = self.idx_of(value);
         
         if let Some(thing) = self.as_thing_mut(idx){
             // 已存在，则替换并返回其原值
@@ -695,6 +670,8 @@ where
     ///
     /// # Panics
     /// 索引越界时panic
+    /// 
+    /// 指定块为空时panic
     pub fn unchecked_remove_index(&mut self, idx: usize) -> V {
         if let Ok(v) = self.remove_index_in(idx) {
             v
@@ -707,15 +684,15 @@ where
     /// 替换指定值对应的指定块
     ///
     /// 成功则返回其原值
-    pub fn replace(&mut self, value: V) -> ReplaceResult<V,IE>
+    pub fn replace(&mut self, value: V) -> ReplaceResult<V>
     where
         V: Mul<usize, Output = V>,
     {
         let idx = self.get_index(value)
-            .map_err(Into::<ReplaceRawFieldSetError<IE>>::into)?;
+            .map_err(Into::<ReplaceRawFieldSetError>::into)?;
         
         self.replace_index_in(idx,value)
-            .map_err(Into::<ReplaceRawFieldSetError<IE>>::into)
+            .map_err(Into::<ReplaceRawFieldSetError>::into)
     }
     
     /// 替换指定值对应的指定块，但无法替换时panic
@@ -727,7 +704,6 @@ where
     pub fn unchecked_replace(&mut self, value: V) -> V
     where
         V: Mul<usize, Output = V> + std::fmt::Debug,
-        IE: std::fmt::Debug,
     {
         let idx = self.unchecked_get_index(value);
         
@@ -738,13 +714,13 @@ where
     /// 用值清空对应块。
     ///
     /// 若指定块非空，返回内部值。
-    pub fn remove(&mut self, value: V) -> RemoveResult<V,IE>
+    pub fn remove(&mut self, value: V) -> RemoveResult<V>
     {
         let idx = self.get_index(value)
-            .map_err(Into::<RemoveRawFieldSetError<IE>>::into)?;
+            .map_err(Into::<RemoveRawFieldSetError>::into)?;
         
         self.remove_index_in(idx)
-            .map_err(Into::<RemoveRawFieldSetError<IE>>::into)
+            .map_err(Into::<RemoveRawFieldSetError>::into)
     }
     
     /// 用值指定清空对应块，但无法清空时panic
@@ -754,8 +730,6 @@ where
     /// # Panics
     /// 见[`unchecked_get_index`]和[`unchecked_remove_index`]
     pub fn unchecked_remove(&mut self, value: V) -> V
-    where
-        IE: std::fmt::Debug,
     {
         let idx = self.unchecked_get_index(value);
         
@@ -765,7 +739,7 @@ where
     
     /// 找到最近的小于等于 target 的值
     ///
-    pub fn find_le(&self, target: V) -> FindResult<V, IE> {
+    pub fn find_le(&self, target: V) -> FindResult<V> {
         self.find_in(
             target,
             Self::matcher_l,
@@ -777,7 +751,7 @@ where
     
     /// 找到最近的小于 target 的值
     ///
-    pub fn find_lt(&self, target: V) -> FindResult<V, IE> {
+    pub fn find_lt(&self, target: V) -> FindResult<V> {
         self.find_in(
             target,
             Self::matcher_l,
@@ -789,7 +763,7 @@ where
     
     /// 找到最近的大于等于 target 的值
     ///
-    pub fn find_ge(&self, target: V) -> FindResult<V, IE> {
+    pub fn find_ge(&self, target: V) -> FindResult<V> {
         self.find_in(
             target,
             Self::matcher_r,
@@ -801,7 +775,7 @@ where
     
     /// 找到最近的大于 target 的值
     ///
-    pub fn find_gt(&self, target: V) -> FindResult<V, IE> {
+    pub fn find_gt(&self, target: V) -> FindResult<V> {
         self.find_in(
             target,
             Self::matcher_r,
@@ -813,7 +787,7 @@ where
     
     /// 找到最近的小于等于 target 的值的索引
     ///
-    pub fn find_index_le(&self, target: V) -> FindResult<usize, IE> {
+    pub fn find_index_le(&self, target: V) -> FindResult<usize> {
         self.find_index_in(
             target,
             Self::matcher_l,
@@ -825,7 +799,7 @@ where
     
     /// 找到最近的小于 target 的值的索引
     ///
-    pub fn find_index_lt(&self, target: V) -> FindResult<usize, IE> {
+    pub fn find_index_lt(&self, target: V) -> FindResult<usize> {
         self.find_index_in(
             target,
             Self::matcher_l,
@@ -837,7 +811,7 @@ where
     
     /// 找到最近的大于等于 target 的值的索引
     ///
-    pub fn find_index_ge(&self, target: V) -> FindResult<usize, IE> {
+    pub fn find_index_ge(&self, target: V) -> FindResult<usize> {
         self.find_index_in(
             target,
             Self::matcher_r,
@@ -849,7 +823,7 @@ where
     
     /// 找到最近的大于 target 的值的索引
     ///
-    pub fn find_index_gt(&self, target: V) -> FindResult<usize, IE> {
+    pub fn find_index_gt(&self, target: V) -> FindResult<usize> {
         self.find_index_in(
             target,
             Self::matcher_r,
@@ -866,7 +840,7 @@ where
     pub fn get_index(
         &self,
         target: V,
-    ) -> GetIndexResult<usize, IE> {
+    ) -> GetIndexResult<usize> {
         use GetIndexRawFieldSetError::*;
         let span = &self.span;
         if !span.contains(&target) { return Err(OutOfSpan); }
@@ -874,7 +848,7 @@ where
         let len = items.len();
         if len == 0 { return Err(Empty); }
         
-        Ok(self.idx_of(target).map_err(IntoError)?.min(len - 1))
+        Ok(self.idx_of(target).min(len - 1))
     }
     
     
@@ -888,8 +862,6 @@ where
         &self,
         target: V,
     ) -> usize
-    where
-        IE: std::fmt::Debug,
     {
         let span = &self.span;
         if !span.contains(&target) { panic!("Called `RawFieldSet::unchecked_get_index()` on a value is not contained in the span"); }
@@ -897,7 +869,7 @@ where
         let len = items.len();
         if len == 0 { panic!("Called `RawFieldSet::unchecked_get_index()` on a empty set"); }
         
-        self.idx_of(target).unwrap().min(len - 1)
+        self.idx_of(target).min(len - 1)
     }
     
     /// 通用底层查找核心
@@ -917,16 +889,16 @@ where
         cmp: impl FnOnce(&V,&V) -> bool,
         lmt: impl FnOnce(usize,usize) -> bool,
         next: impl FnOnce(usize) -> usize,
-    ) -> FindResult<V,IE>
+    ) -> FindResult<V>
     {
         use FindRawFieldSetError::*;
         
         let idx = self.get_index(target)
-            .map_err(Into::<FindRawFieldSetError<IE>>::into)?;
+            .map_err(Into::<FindRawFieldSetError>::into)?;
         let items = &self.items;
         let len = items.len();
         let current = matcher(self,&items[idx])
-            .map_err(Into::<FindRawFieldSetError<IE>>::into)?;
+            .map_err(Into::<FindRawFieldSetError>::into)?;
         
         Ok(if cmp(&current.1, &target) {
             current.1
@@ -944,15 +916,15 @@ where
         cmp: impl FnOnce(&V,&V) -> bool,
         lmt: impl FnOnce(usize,usize) -> bool,
         next: impl FnOnce(usize) -> usize,
-    ) -> FindResult<usize, IE>
+    ) -> FindResult<usize>
     {
         use FindRawFieldSetError::*;
         let idx = self.get_index(target)
-            .map_err(Into::<FindRawFieldSetError<IE>>::into)?;
+            .map_err(Into::<FindRawFieldSetError>::into)?;
         let items = &self.items;
         let len = items.len();
         let current = matcher(self,&items[idx])
-            .map_err(Into::<FindRawFieldSetError<IE>>::into)?;
+            .map_err(Into::<FindRawFieldSetError>::into)?;
         
         Ok(if cmp(&current.1, &target) {
             idx

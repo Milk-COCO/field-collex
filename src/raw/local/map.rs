@@ -2,17 +2,15 @@ use thiserror::Error;
 use std::hash::Hash;
 use std::mem;
 use ahash::AHashMap;
-use std::ops::{Deref, DerefMut, Div, Mul, Sub};
+use std::ops::{Div, Mul, Sub};
 use num_traits::real::Real;
 use span_core::Span;
 use super::set::*;
 
-pub(crate) type FindResult<T,I> = Result<T, FindRawFieldMapError<I>>;
+pub(crate) type FindResult<T> = Result<T, FindRawFieldMapError>;
 
 #[derive(Error, Debug)]
-pub enum FindRawFieldMapError<I> {
-    #[error(transparent)]
-    IntoError(I),
+pub enum FindRawFieldMapError {
     #[error("目标值超出了当前RawFieldMap的span范围")]
     OutOfSpan,
     #[error("无匹配的数据")]
@@ -22,41 +20,25 @@ pub enum FindRawFieldMapError<I> {
 }
 
 
-pub(crate) type ReplaceIndexResult<T,I> = Result<T, ReplaceIndexRawFieldMapError<T,I>>;
+pub(crate) type ReplaceIndexResult<T> = Result<T, ReplaceIndexRawFieldMapError<T>>;
 
 #[derive(Error, Debug)]
-pub enum ReplaceIndexRawFieldMapError<T,I> {
-    /// 转换错误（携带失败的 T + 转换错误 I）
-    #[error("转换失败，插入的值：{0:?}，错误：{1:?}")]
-    IntoError(T, I),
+pub enum ReplaceIndexRawFieldMapError<T> {
     #[error("指定的块为空块")]
     EmptyField(T),
 }
 
-impl<T,I> ReplaceIndexRawFieldMapError<T,I>{
+impl<T> ReplaceIndexRawFieldMapError<T>{
     pub fn unwrap(self) -> T {
         match self {
-            Self::IntoError(v, _) => {v}
             Self::EmptyField(v) => {v}
         }
     }
 }
 
-
-pub(crate) type RemoveIndexResult<T> = Result<T, RemoveIndexRawFieldMapError>;
-
+pub(crate) type TryInsertResult<T> = Result<(), TryInsertRawFieldMapError<T>>;
 #[derive(Error, Debug)]
-pub enum RemoveIndexRawFieldMapError {
-    #[error("指定的块已为空块")]
-    EmptyField,
-}
-
-pub(crate) type TryInsertResult<T,I> = Result<(), TryInsertRawFieldMapError<T,I>>;
-#[derive(Error, Debug)]
-pub enum TryInsertRawFieldMapError<T,I> {
-    /// 转换错误（携带失败的 T + 转换错误 I）
-    #[error("转换失败，插入的值：{0:?}，错误：{1:?}")]
-    IntoError(T, I),
+pub enum TryInsertRawFieldMapError<T> {
     /// Key超出span范围（携带失败的 T）
     #[error("Key超出了当前RawFieldMap的span范围，插入的值：{0:?}")]
     OutOfSpan(T),
@@ -65,46 +47,39 @@ pub enum TryInsertRawFieldMapError<T,I> {
     AlreadyExists(T),
 }
 
-impl<T,I> TryInsertRawFieldMapError<T,I>{
+impl<T> TryInsertRawFieldMapError<T>{
     pub fn unwrap(self) -> T {
         match self {
-            Self::IntoError(v, _) => {v}
             Self::OutOfSpan(v) => {v}
             Self::AlreadyExists(v) => {v}
         }
     }
     
-    pub(crate) fn from_set(value:T, err: TryInsertRawFieldSetError<I>) -> Self {
+    pub(crate) fn from_set(value:T, err: TryInsertRawFieldSetError) -> Self {
         match err {
-            TryInsertRawFieldSetError::IntoError(ie) => {Self::IntoError(value,ie)}
             TryInsertRawFieldSetError::OutOfSpan => {Self::OutOfSpan(value)}
             TryInsertRawFieldSetError::AlreadyExists => {Self::AlreadyExists(value)}
         }
     }
 }
 
-pub(crate) type InsertResult<K,V,I> = Result<Option<(K,V)>, InsertRawFieldMapError<V,I>>;
+pub(crate) type InsertResult<K,V> = Result<Option<(K,V)>, InsertRawFieldMapError<V>>;
 #[derive(Error, Debug)]
-pub enum InsertRawFieldMapError<T,I> {
-    /// 转换错误（携带失败的 T + 转换错误 I）
-    #[error("转换失败，插入的值：{0:?}，错误：{1:?}")]
-    IntoError(T, I),
+pub enum InsertRawFieldMapError<T> {
     /// Key超出span范围（携带失败的 T）
     #[error("Key超出了当前RawFieldMap的span范围，插入的值：{0:?}")]
     OutOfSpan(T),
 }
 
-impl<T,I> InsertRawFieldMapError<T,I>{
+impl<T> InsertRawFieldMapError<T>{
     pub fn unwrap(self) -> T {
         match self {
-            Self::IntoError(v, _) => {v}
             Self::OutOfSpan(v) => {v}
         }
     }
     
-    pub(crate) fn from_set(value:T ,err: InsertRawFieldSetError<I>) -> Self {
+    pub(crate) fn from_set(value:T ,err: InsertRawFieldSetError) -> Self {
         match err {
-            InsertRawFieldSetError::IntoError(ie) => {Self::IntoError(value,ie)}
             InsertRawFieldSetError::OutOfSpan => {Self::OutOfSpan(value)}
         }
     }
@@ -131,16 +106,16 @@ impl<T,I> InsertRawFieldMapError<T,I>{
 #[derive(Default, Debug)]
 pub struct RawFieldMap<K,V>
 where
-    K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize> + Sized + Real,
+    K: Div<K,Output=K> + Sub<K,Output=K> + Into<usize> + Sized + Real,
     K: Hash + Eq,
 {
     pub(crate) keys: RawFieldSet<K>,
     pub(crate) values: AHashMap<K,V>
 }
 
-impl<K,V,IE> RawFieldMap<K,V>
+impl<K,V> RawFieldMap<K,V>
 where
-    K: Div<K,Output=K> + Sub<K,Output=K> + TryInto<usize,Error=IE> + Sized + Real,
+    K: Div<K,Output=K> + Sub<K,Output=K> + Into<usize> + Sized + Real,
     K: Hash + Eq,
 {
     /// 提供span与unit，构建一个RawFieldMap
@@ -159,7 +134,7 @@ where
     ///
     /// span为Key的范围，unit为每个块的大小，同时也是每个块之间的间隔
     ///
-    /// 若unit为0、span为空、转换失败、capacity大于最大块数量，通过返回Err返还提供的数据
+    /// 若unit为0、span为空、capacity大于最大块数量，通过返回Err返还提供的数据
     pub fn with_capacity(span: Span<K>, unit: K, capacity: usize) -> Result<Self, (Span<K>, K)> {
         Ok(Self {
             keys: RawFieldSet::with_capacity(span, unit, capacity)?,
@@ -192,7 +167,7 @@ where
     /// 尝试插入值
     ///
     /// 插入失败会返回 `TryInsertRawFieldSetError` ，使用 `unwrap` 方法得到传入值 `value`。
-    pub fn try_insert(&mut self, key: K, value: V) -> TryInsertResult<V, IE> {
+    pub fn try_insert(&mut self, key: K, value: V) -> TryInsertResult<V> {
         match self.keys.try_insert(key) {
             Ok(v) => { v }
             // 不能用map_err，因为需要拿到value的所有权。
@@ -209,7 +184,7 @@ where
     /// 若对应块已有值，新值将替换原值，返回Ok(Some((K,V)))包裹原键值。<br>
     /// 若无值，插入新值返回 Ok(None)。
     ///
-    pub fn insert(&mut self, key: K, value: V) -> InsertResult<K, V, IE> {
+    pub fn insert(&mut self, key: K, value: V) -> InsertResult<K, V> {
         let result =
             match self.keys.insert(key) {
                 Ok(v) => { v }
@@ -271,10 +246,10 @@ where
     ///
     /// # Panics
     /// 插入逻辑确保存在Key时就存在value。若存在对应Key而不存在对应Value，panic。
-    pub fn replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V,IE> {
+    pub fn replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V> {
         use ReplaceIndexRawFieldMapError::*;
         
-        let items = &mut self.items;
+        let items = &mut self.keys.items;
         let len = items.len();
         
         if idx>=len { return Err(EmptyField(value)) }
@@ -290,7 +265,7 @@ where
     /// 索引越界时panic
     ///
     /// 插入逻辑确保存在Key时就存在value。若存在对应Key而不存在对应Value，panic。
-    pub(crate) fn replace_index_in(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V,IE> {
+    pub(crate) fn replace_index_in(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V> {
         use ReplaceIndexRawFieldMapError::*;
         
         if let RawField::Thing(thing) = self.keys.items[idx] {
