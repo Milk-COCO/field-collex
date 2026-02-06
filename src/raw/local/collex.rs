@@ -1,5 +1,5 @@
 use std::hash::Hash;
-use std::ops::{Deref, DerefMut, Div, Sub};
+use std::ops::{Div, Sub};
 use num_traits::real::Real;
 use span_core::Span;
 pub use super::map::InsertRawFieldMapError;
@@ -86,30 +86,5 @@ where
     /// > 但好像没什么用
     pub fn insert_key_value(&mut self, value: V) -> map::InsertResult<K, V>{
         self.map.insert((self.picker)(&value), value)
-    }
-}
-
-impl<K,V,F> Deref for RawFieldCollex<K,V,F>
-where
-    K: Div<K,Output=K> + Sub<K,Output=K> + Into<usize> + Sized + Real ,
-    K: Hash + Eq,
-    F: Fn(&V) -> K
-{
-    type Target = RawFieldMap<K,V>;
-    
-    /// 只有一些方法并需要进行上层包装。比如插入相关。
-    fn deref(&self) -> &Self::Target {
-        &self.map
-    }
-}
-
-impl<K,V,F> DerefMut for RawFieldCollex<K,V,F>
-where
-    K: Div<K,Output=K> + Sub<K,Output=K> + Into<usize> + Sized + Real ,
-    K: Hash + Eq,
-    F: Fn(&V) -> K
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.map
     }
 }
