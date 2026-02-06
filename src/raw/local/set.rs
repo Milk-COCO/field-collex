@@ -728,8 +728,8 @@ where
     /// 返回原值。
     ///
     /// # Panics
-    /// 见[`unchecked_get_index`]和[`unchecked_remove_index`]
-    pub fn unchecked_remove(&mut self, value: V) -> V
+    /// 同[`unchecked_get_index`] + [`unchecked_remove_index`]
+    // pub fn unchecked_remove(&mut self, value: V) -> V
     {
         let idx = self.unchecked_get_index(value);
         
