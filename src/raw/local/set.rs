@@ -14,7 +14,7 @@ use thiserror::Error;
 /// Void ：容器完全无任何元素 <br>
 ///
 #[derive(Debug, Clone)]
-pub(crate) enum RawField<V>
+pub enum RawField<V>
 where V:Copy
 {
     Thing((usize, V)),
@@ -851,7 +851,6 @@ where
         
         Ok(self.idx_of(target).min(len - 1))
     }
-    
     
     /// 计算指定值对应的块索引，但是带通用前置检查，但检查不通过时panic
     ///
