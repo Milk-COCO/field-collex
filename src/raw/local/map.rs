@@ -1,3 +1,8 @@
+
+//! # 模块脚注
+//! 1. 插入逻辑确保存在Key时就存在value。若存在对应Key而不存在对应Value，那就panic吧，反正基本上只可能是我们的问题。
+
+
 use thiserror::Error;
 use std::hash::Hash;
 use std::mem;
@@ -5,7 +10,7 @@ use ahash::AHashMap;
 use std::ops::{Div, Mul, Sub};
 use num_traits::real::Real;
 use span_core::Span;
-use super::set::*;
+use super::set::{self, *};
 
 pub(crate) type FindResult<T> = Result<T, FindRawFieldMapError>;
 
@@ -186,10 +191,8 @@ where
     /// 通过索引得到块值引用
     ///
     /// 若块不为空，返回Some
-    /// 
-    /// # Panics
-    /// 插入逻辑确保存在Key时就存在value。若存在对应Key而不存在对应Value，panic。
     pub fn get(&self, idx: usize) -> Option<&V> {
+        // 模块文档脚注1
         Some(self.values.get(&self.keys.get(idx)?).unwrap())
     }
     
@@ -199,9 +202,8 @@ where
     ///
     /// # Panics
     /// 越界访问时panic
-    /// 
-    /// 插入逻辑确保存在Key时就存在value。若存在对应Key而不存在对应Value，panic。
     pub fn unchecked_get(&self, idx: usize) -> Option<&V> {
+        // 模块文档脚注1
         Some(self.values.get(&self.keys.get_in(idx)?).unwrap())
     }
     
@@ -284,9 +286,6 @@ where
     /// 用索引指定替换块的值
     ///
     /// 成功则返回其原值
-    ///
-    /// # Panics
-    /// 插入逻辑确保存在Key时就存在value。若存在对应Key而不存在对应Value，panic。
     pub fn replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V> {
         use ReplaceIndexRawFieldMapError::*;
         
@@ -304,12 +303,11 @@ where
     ///
     /// # Panics
     /// 索引越界时panic
-    ///
-    /// 插入逻辑确保存在Key时就存在value。若存在对应Key而不存在对应Value，panic。
     pub(crate) fn replace_index_in(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V> {
         use ReplaceIndexRawFieldMapError::*;
         
         if let RawField::Thing(thing) = self.keys.items[idx] {
+            // 模块文档脚注1
             Ok(mem::replace(&mut self.values.get_mut(&thing.1).unwrap(),value))
         } else {
             Err(EmptyField(value))
@@ -324,10 +322,9 @@ where
     /// 索引越界时panic
     ///
     /// 指定块为空时panic
-    ///
-    /// 插入逻辑确保存在Key时就存在value。若存在对应Key而不存在对应Value，panic。
     pub fn unchecked_replace_index(&mut self, idx: usize, value: V) -> V {
         if let RawField::Thing(thing) = self.keys.items[idx] {
+            // 模块文档脚注1
             mem::replace(&mut self.values.get_mut(&thing.1).unwrap(),value)
         } else {
             panic!("Called `RawFieldMap::unchecked_replace_index()` on a empty field")
@@ -335,4 +332,36 @@ where
     }
     
     
+    
+    /// 用键指定块，将其键替换
+    ///
+    /// 成功则返回其原键
+    pub fn replace_key(&mut self, key: K) -> set::ReplaceResult<K>
+    where
+        K: Mul<usize, Output = K>,
+    {
+        let old = self.keys.replace(key)?;
+        // 下面操作可能耗时。内部replace基本不耗时，所以没在内部判断此
+        if old == key { return Ok(old);}
+        // 模块文档脚注1
+        let v = self.values.remove(&old).unwrap();
+        // 一个区间内只可能存在一个K，
+        // 所以删除`old`的V后，内部replace的实现已经让`key`与任何现有的K不同，
+        // 所以不用检查
+        self.values.insert(key, v);
+        Ok(old)
+    }
+    
+    
+    /// 用键指定块，将其键替换
+    ///
+    /// 成功则返回其原键
+    pub fn unchecked_replace_key(&mut self, key: K) -> K
+    where
+        K: Mul<usize, Output = K> + std::fmt::Debug,
+    {
+        self.keys.unchecked_replace(key)
+    }
+    
+    pub fn remove
 }
