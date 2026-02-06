@@ -182,6 +182,15 @@ where
         self.keys.is_thing(idx)
     }
     
+    /// 计算指定值对应的块索引
+    ///
+    /// 此无任何前置检查，只会机械地返回目标相对于初始位置（区间的左端点）可能处于第几个块，但不确保这个块是否合法。<br>
+    /// 包含前置检查的版本是[`get_index`]
+    #[inline(always)]
+    pub fn idx_of(&self, key: K) -> usize {
+        self.keys.idx_of(key)
+    }
+    
     /// 查找对应键是否存在
     ///
     pub fn contains_key(&self, value: K) -> bool {
