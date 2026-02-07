@@ -23,8 +23,8 @@ where
 ///
 pub struct RawFieldCollex<K,V,F>
 where
-    K: Div<K,Output=K> + Sub<K,Output=K> + Into<usize> + Sized + Real,
-    K: Hash + Eq,
+    K: Ord + Real + Into<usize>,
+    K: Hash,
     F: Fn(&V) -> K
 {
     map: RawFieldMap<K,V>,
@@ -33,8 +33,8 @@ where
 
 impl<K,V> RawFieldCollex<K,V,fn(&V) -> K>
 where
-    K: Div<K,Output=K> + Sub<K,Output=K> + Into<usize> + Sized + Real,
-    K: Hash + Eq,
+    K: Ord + Real + Into<usize>,
+    K: Hash,
     V: CollexValue<K>,
 {
     pub fn new(span: Span<K>, unit: K) -> Result<Self,(Span<K>,K)> {
@@ -55,8 +55,8 @@ where
 
 impl<K,V,F> RawFieldCollex<K,V,F>
 where
-    K: Div<K,Output=K> + Sub<K,Output=K> + Into<usize> + Sized + Real,
-    K: Hash + Eq,
+    K: Ord + Real + Into<usize>,
+    K: Hash,
     F: Fn(&V) -> K
 {
     pub fn with_picker(span: Span<K>, unit: K, picker: F) -> Result<Self,(Span<K>,K)> {

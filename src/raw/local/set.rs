@@ -1,7 +1,7 @@
 use span_core::Span;
 use num_traits::real::Real;
 use std::mem;
-use std::ops::*;
+use std::ops::Mul;
 use std::vec::Vec;
 use thiserror::Error;
 
@@ -14,9 +14,7 @@ use thiserror::Error;
 /// Void ：容器完全无任何元素 <br>
 ///
 #[derive(Debug, Clone)]
-pub enum RawField<V>
-where V:Copy
-{
+pub enum RawField<V> {
     Thing((usize, V)),
     Prev (usize),
     Among(usize, usize),
@@ -24,12 +22,10 @@ where V:Copy
     Void,
 }
 
-impl<V> RawField<V>
-where V:Copy
-{
-    pub fn as_thing(&self) -> (usize, V) {
+impl<V> RawField<V> {
+    pub fn as_thing(&self) -> &(usize, V) {
         match self {
-            Self::Thing(t) => *t,
+            Self::Thing(t) => t,
             _ => panic!("Called `RawField::as_thing()` on a not `Thing` value`"),
         }
     }
@@ -223,7 +219,7 @@ pub enum InsertRawFieldSetError {
 #[derive(Default, Debug)]
 pub struct RawFieldSet<V>
 where
-    V: Div<V,Output= V> + Sub<V,Output= V> + Into<usize> + Sized + Real,
+    V: Ord + Real + Into<usize>,
 {
     pub(crate) span: Span<V>,
     pub(crate) unit: V,
@@ -233,7 +229,7 @@ where
 
 impl<V> RawFieldSet<V>
 where
-    V: Div<V,Output= V> + Sub<V,Output= V> + Into<usize> + Sized + Real,
+    V: Ord + Real + Into<usize>,
 {
     /// 提供span与unit，构建一个RawFieldSet
     ///

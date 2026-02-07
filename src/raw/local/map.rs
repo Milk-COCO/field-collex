@@ -7,24 +7,11 @@ use thiserror::Error;
 use std::hash::Hash;
 use std::mem;
 use ahash::AHashMap;
-use std::ops::{Div, Mul, Sub};
+use std::ops::Mul;
 use num_traits::real::Real;
 use span_core::Span;
 pub use super::set::{InsertRawFieldSetError, TryInsertRawFieldSetError};
 use super::set::{self, RawField, RawFieldSet};
-
-pub(crate) type FindResult<T> = Result<T, FindRawFieldMapError>;
-
-#[derive(Error, Debug)]
-pub enum FindRawFieldMapError {
-    #[error("目标值超出了当前RawFieldMap的span范围")]
-    OutOfSpan,
-    #[error("无匹配的数据")]
-    CannotFind,
-    #[error("当前无数据可查询")]
-    Empty,
-}
-
 
 pub(crate) type ReplaceIndexResult<T> = Result<T, ReplaceIndexRawFieldMapError<T>>;
 
@@ -112,8 +99,8 @@ impl<T> InsertRawFieldMapError<T>{
 #[derive(Default, Debug)]
 pub struct RawFieldMap<K,V>
 where
-    K: Div<K,Output=K> + Sub<K,Output=K> + Into<usize> + Sized + Real,
-    K: Hash + Eq,
+    K: Ord + Real + Into<usize>,
+    K: Hash,
 {
     pub(crate) keys: RawFieldSet<K>,
     pub(crate) values: AHashMap<K,V>
@@ -121,8 +108,8 @@ where
 
 impl<K,V> RawFieldMap<K,V>
 where
-    K: Div<K,Output=K> + Sub<K,Output=K> + Into<usize> + Sized + Real,
-    K: Hash + Eq,
+    K: Ord + Real + Into<usize>,
+    K: Hash,
 {
     /// 提供span与unit，构建一个RawFieldMap
     ///
@@ -490,7 +477,7 @@ where
     pub fn get_index(
         &self,
         target: K,
-    ) -> set::GetIndexResult<usize> 
+    ) -> set::GetIndexResult<usize>
     {
         self.keys.get_index(target)
     }
