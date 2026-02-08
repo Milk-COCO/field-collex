@@ -175,14 +175,14 @@ where
     /// 此无任何前置检查，只会机械地返回目标相对于初始位置（区间的左端点）可能处于第几个块，但不确保这个块是否合法。<br>
     /// 包含前置检查的版本是[`get_index`]
     #[inline(always)]
-    pub fn idx_of(&self, key: K) -> usize {
-        self.keys.idx_of(key)
+    pub fn idx_of(&self, target: K) -> usize {
+        self.keys.idx_of(target)
     }
     
     /// 查找对应键是否存在
     ///
-    pub fn contains_key(&self, value: K) -> bool {
-        self.keys.contains(value)
+    pub fn contains_key(&self, target: K) -> bool {
+        self.keys.contains(target)
     }
     
     /// 通过索引得到块值引用
@@ -209,15 +209,15 @@ where
     /// 尝试插入值
     ///
     /// 插入失败会返回 `TryInsertRawFieldSetError` ，使用 `unwrap` 方法得到传入值 `value`。
-    pub fn try_insert(&mut self, key: K, value: V) -> TryInsertResult<V> {
-        match self.keys.try_insert(key) {
+    pub fn try_insert(&mut self, target: K, value: V) -> TryInsertResult<V> {
+        match self.keys.try_insert(target) {
             Ok(v) => { v }
             // 不能用map_err，因为需要拿到value的所有权。
             Err(err) => {
                 return Err(TryInsertRawFieldMapError::from_set(value, err))
             }
         }
-        self.values.insert(key, value);
+        self.values.insert(target, value);
         Ok(())
     }
     
@@ -226,9 +226,9 @@ where
     /// 若对应块已有值，新值将替换原值，返回Ok(Some((K,V)))包裹原键值。<br>
     /// 若无值，插入新值返回 Ok(None)。
     ///
-    pub fn insert(&mut self, key: K, value: V) -> InsertResult<K, V> {
+    pub fn insert(&mut self, target: K, value: V) -> InsertResult<K, V> {
         let result =
-            match self.keys.insert(key) {
+            match self.keys.insert(target) {
                 Ok(v) => { v }
                 // 不能用map_err，因为需要拿到value的所有权。
                 Err(err) => {
@@ -238,7 +238,7 @@ where
                 // 上面确保Some时是已存在k，所以unwrap没问题。panic就是别的地方逻辑有问题！
                 .map(|k| (k, self.values.remove(&k).unwrap()))
             ;
-        self.values.insert(key, value);
+        self.values.insert(target, value);
         Ok(result)
     }
     
@@ -246,11 +246,11 @@ where
     /// 用索引指定替换块的键
     ///
     /// 成功则返回其原键
-    pub fn replace_key_index(&mut self, idx: usize, key: K) -> set::ReplaceIndexResult<K>
+    pub fn replace_key_index(&mut self, idx: usize, target: K) -> set::ReplaceIndexResult<K>
     where
         K: Mul<usize, Output = K>,
     {
-        self.keys.replace_index(idx,key)
+        self.keys.replace_index(idx, target)
     }
     
     /// 用索引指定替换块的键，但不进行索引检查
@@ -259,11 +259,11 @@ where
     ///
     /// # Panics
     /// 索引越界时panic
-    pub(crate) fn replace_key_index_in(&mut self, idx: usize, key: K) -> set::ReplaceIndexResult<K>
+    pub(crate) fn replace_key_index_in(&mut self, idx: usize, target: K) -> set::ReplaceIndexResult<K>
     where
         K: Mul<usize, Output = K>,
     {
-        self.keys.replace_index_in(idx, key)
+        self.keys.replace_index_in(idx, target)
     }
     
     /// 用索引指定替换块的键，但无法替换时panic
@@ -373,19 +373,19 @@ where
     /// 用键指定块，将其键替换
     ///
     /// 成功则返回其原键
-    pub fn replace_key(&mut self, key: K) -> set::ReplaceResult<K>
+    pub fn replace_key(&mut self, target: K) -> set::ReplaceResult<K>
     where
         K: Mul<usize, Output = K>,
     {
-        let old = self.keys.replace(key)?;
+        let old = self.keys.replace(target)?;
         // 下面操作可能耗时。内部replace基本不耗时，所以没在内部判断此
-        if old == key { return Ok(old);}
+        if old == target { return Ok(old);}
         // 模块文档脚注1
         let v = self.values.remove(&old).unwrap();
         // 一个区间内只可能存在一个K，
         // 所以删除`old`的V后，内部replace的实现已经让`key`与任何现有的K不同，
         // 所以不用检查
-        self.values.insert(key, v);
+        self.values.insert(target, v);
         Ok(old)
     }
     
@@ -393,18 +393,18 @@ where
     /// 用键指定块，将其键替换
     ///
     /// 成功则返回其原键
-    pub fn unchecked_replace_key(&mut self, key: K) -> K
+    pub fn unchecked_replace_key(&mut self, target: K) -> K
     where
         K: Mul<usize, Output = K> + std::fmt::Debug,
     {
-        self.keys.unchecked_replace(key)
+        self.keys.unchecked_replace(target)
     }
     
     /// 用键清空对应块。
     ///
     /// 若指定块非空，返回原(键,值)。
-    pub fn remove(&mut self, key: K) -> set::RemoveResult<(K,V)> {
-        let k = self.keys.remove(key)?;
+    pub fn remove(&mut self, target: K) -> set::RemoveResult<(K,V)> {
+        let k = self.keys.remove(target)?;
         // 模块文档脚注1
         let v = self.values.remove(&k).unwrap();
         Ok((k,v))
@@ -416,8 +416,8 @@ where
     ///
     /// # Panics
     /// 同[`unchecked_get_index`] + [`unchecked_remove_index`]
-    pub fn unchecked_remove(&mut self, key: K) -> (K,V) {
-        let k = self.keys.unchecked_remove(key);
+    pub fn unchecked_remove(&mut self, target: K) -> (K,V) {
+        let k = self.keys.unchecked_remove(target);
         // 模块文档脚注1
         let v = self.values.remove(&k).unwrap();
         (k,v)

@@ -353,8 +353,8 @@ where
     /// 此无任何前置检查，只会机械地返回目标相对于初始位置（区间的左端点）可能处于第几个块，但不确保这个块是否合法。<br>
     /// 包含前置检查的版本是[`get_index`]
     #[inline(always)]
-    pub fn idx_of(&self, value: V) -> usize {
-        ((value - *self.span.start()) / self.unit).into()
+    pub fn idx_of(&self, target: V) -> usize {
+        ((target - *self.span.start()) / self.unit).into()
     }
     
     pub(crate) fn resize_to_idx(&mut self, idx: usize) {
@@ -420,7 +420,7 @@ where
     pub(crate) fn try_insert_in(
         &mut self,
         idx: usize,
-        value: V,
+        target: V,
     ) {
         // 扩容到目标索引
         self.resize_to_idx(idx);
@@ -451,24 +451,24 @@ where
                 };
             });
         
-        items[idx] = RawField::Thing((idx,value));
+        items[idx] = RawField::Thing((idx,target));
     }
     
     /// 尝试插入值
     ///
     /// 插入失败会返回 [`TryInsertRawFieldSetError`]
-    pub fn try_insert(&mut self, value: V) -> TryInsertResult {
+    pub fn try_insert(&mut self, target: V) -> TryInsertResult {
         use TryInsertRawFieldSetError::*;
         let span = &self.span;
-        if !span.contains(&value) { return Err(OutOfSpan) }
+        if !span.contains(&target) { return Err(OutOfSpan) }
         
-        let idx = self.idx_of(value);
+        let idx = self.idx_of(target);
         
         if self.is_thing(idx) {return Err(AlreadyExists)};
         
         self.try_insert_in(
             idx,
-            value,
+            target,
         );
         Ok(())
     }
@@ -478,23 +478,23 @@ where
     /// 若对应块已有值，新值将替换原值，返回Ok(Some(V))包裹原值。<br>
     /// 若无值，插入新值返回None。
     ///
-    pub fn insert(&mut self, value: V) -> InsertResult<V>  {
+    pub fn insert(&mut self, target: V) -> InsertResult<V>  {
         use InsertRawFieldSetError::*;
         let span = &self.span;
-        if !span.contains(&value) { return Err(OutOfSpan) }
+        if !span.contains(&target) { return Err(OutOfSpan) }
         
-        let idx = self.idx_of(value);
+        let idx = self.idx_of(target);
         
         if let Some(thing) = self.as_thing_mut(idx){
             // 已存在，则替换并返回其原值
             let old = thing.1;
-            thing.1 = value;
+            thing.1 = target;
             Ok(Some(old))
         } else {
             // 同 try_insert
             self.try_insert_in(
                 idx,
-                value,
+                target,
             );
             
             Ok(None)
@@ -505,7 +505,7 @@ where
     /// 用索引指定替换块
     ///
     /// 成功则返回其原值
-    pub fn replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V>
+    pub fn replace_index(&mut self, idx: usize, target: V) -> ReplaceIndexResult<V>
     where
         V: Mul<usize, Output = V>,
     {
@@ -516,7 +516,7 @@ where
         
         if idx>=len { return Err(EmptyField) }
         
-        self.replace_index_in(idx, value)
+        self.replace_index_in(idx, target)
     }
     
     /// 用索引指定替换块，但不进行索引检查
@@ -525,18 +525,18 @@ where
     ///
     /// # Panics
     /// 索引越界时panic
-    pub(crate) fn replace_index_in(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V>
+    pub(crate) fn replace_index_in(&mut self, idx: usize, target: V) -> ReplaceIndexResult<V>
     where
         V: Mul<usize, Output = V>,
     {
         use ReplaceIndexRawFieldSetError::*;
         
-        if !(self.unit*idx..self.unit*(idx+1)).contains(&value) {
+        if !(self.unit*idx..self.unit*(idx+1)).contains(&target) {
             return Err(OutOfField);
         }
         
         if let RawField::Thing(ref mut thing) = self.items[idx] {
-            Ok(mem::replace(&mut (thing.1),value))
+            Ok(mem::replace(&mut (thing.1),target ))
         } else {
             Err(EmptyField)
         }
@@ -550,19 +550,19 @@ where
     /// 索引越界时panic
     ///
     /// 指定块为空时panic
-    pub fn unchecked_replace_index(&mut self, idx: usize, value: V) -> V
+    pub fn unchecked_replace_index(&mut self, idx: usize, target: V) -> V
     where
         V: Mul<usize, Output = V> + std::fmt::Debug,
     {
         let range = self.unit*idx..self.unit*(idx+1);
-        if !range.contains(&value) {
-            panic!("Called `RawField::unchecked_replace_index()` with value '{value:?}' cannot be in field {idx} (out of {range:?})")
+        if !range.contains(&target) {
+            panic!("Called `RawField::unchecked_replace_index()` with target '{target:?}' cannot be in field {idx} (out of {range:?})")
         }
         // 提示编译器这个range后面不再用到
         drop(range);
         
         if let RawField::Thing(ref mut thing) = self.items[idx] {
-            mem::replace(&mut (thing.1),value)
+            mem::replace(&mut (thing.1),target)
         } else {
             panic!("Called `RawField::unchecked_replace_index()` on a empty field")
         }
@@ -682,14 +682,14 @@ where
     /// 替换指定值对应的指定块
     ///
     /// 成功则返回其原值
-    pub fn replace(&mut self, value: V) -> ReplaceResult<V>
+    pub fn replace(&mut self, target: V) -> ReplaceResult<V>
     where
         V: Mul<usize, Output = V>,
     {
-        let idx = self.get_index(value)
+        let idx = self.get_index(target)
             .map_err(Into::<ReplaceRawFieldSetError>::into)?;
         
-        self.replace_index_in(idx,value)
+        self.replace_index_in(idx, target)
             .map_err(Into::<ReplaceRawFieldSetError>::into)
     }
     
@@ -699,22 +699,22 @@ where
     ///
     /// # Panics
     /// 见[`unchecked_get_index`]和[`unchecked_replace_index`]
-    pub fn unchecked_replace(&mut self, value: V) -> V
+    pub fn unchecked_replace(&mut self, target: V) -> V
     where
         V: Mul<usize, Output = V> + std::fmt::Debug,
     {
-        let idx = self.unchecked_get_index(value);
+        let idx = self.unchecked_get_index(target);
         
-        self.unchecked_replace_index(idx,value)
+        self.unchecked_replace_index(idx,target)
     }
     
     
     /// 用值清空对应块。
     ///
     /// 若指定块非空，返回内部值。
-    pub fn remove(&mut self, value: V) -> RemoveResult<V>
+    pub fn remove(&mut self, target: V) -> RemoveResult<V>
     {
-        let idx = self.get_index(value)
+        let idx = self.get_index(target)
             .map_err(Into::<RemoveRawFieldSetError>::into)?;
         
         self.remove_index_in(idx)
@@ -727,9 +727,9 @@ where
     ///
     /// # Panics
     /// 同[`unchecked_get_index`] + [`unchecked_remove_index`]
-    pub fn unchecked_remove(&mut self, value: V) -> V
+    pub fn unchecked_remove(&mut self, target: V) -> V
     {
-        let idx = self.unchecked_get_index(value);
+        let idx = self.unchecked_get_index(target);
         
         self.unchecked_remove_index(idx)
     }
@@ -860,7 +860,7 @@ where
     ) -> usize
     {
         let span = &self.span;
-        if !span.contains(&target) { panic!("Called `RawFieldSet::unchecked_get_index()` on a value is not contained in the span"); }
+        if !span.contains(&target) { panic!("Called `RawFieldSet::unchecked_get_index()` on a target is not contained in the span"); }
         let items = &self.items;
         let len = items.len();
         if len == 0 { panic!("Called `RawFieldSet::unchecked_get_index()` on a empty set"); }
