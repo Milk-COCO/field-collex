@@ -2,10 +2,9 @@ use std::hash::Hash;
 use std::ops::{Div, Mul, Sub};
 use num_traits::real::Real;
 use span_core::Span;
+use super::{set,map};
+use super::map::RawFieldMap;
 pub use super::map::InsertRawFieldMapError;
-use crate::raw::local::map::{self, RawFieldMap, ReplaceIndexResult};
-use crate::raw::local::map::ReplaceIndexRawFieldMapError::EmptyField;
-use crate::raw::local::set;
 
 pub trait CollexValue<K>
 where
@@ -192,7 +191,7 @@ where
     /// 用索引指定替换块的值
     ///
     /// 成功则返回其原值
-    pub fn replace_index(&mut self, idx: usize, value: V) -> ReplaceIndexResult<V> {
+    pub fn replace_index(&mut self, idx: usize, value: V) -> map::ReplaceIndexResult<V> {
         self.map.replace_index(idx, value)
     }
     
