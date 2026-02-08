@@ -6,7 +6,7 @@ use super::{set,map};
 use super::map::RawFieldMap;
 pub use super::map::InsertRawFieldMapError;
 
-pub trait CollexValue<K>
+pub trait AMapValue<K>
 where
     K: Div<K,Output=K> + Sub<K,Output=K> + Into<usize> + Sized + Real,
 {
@@ -16,13 +16,13 @@ where
 
 /// RawFieldMap 的高级包装
 ///
-/// Collex 是 Collection Ex 的缩写
+/// AMap 意思是 Auto Map
 ///
-/// 不需要提供Key，只需要提供Value，Key从Value取得 <br>
+/// 不需要提供Key，只需要提供Value，Key从Value取得，这就是auto的意味 <br>
 /// 使用 [`with_closure`] 来提供闭包以从V得到K <br>
-/// 或者 你可以给Value实现`CollexValue<Key>` ，内部会自动使用这个trait中的pick()函数
+/// 或者 你可以给Value实现`AMapValue<Key>` ，内部会自动使用这个trait中的pick()函数
 ///
-pub struct RawFieldCollex<K,V,F>
+pub struct RawFieldAMap<K,V,F>
 where
     K: Ord + Real + Into<usize>,
     K: Hash,
@@ -32,11 +32,11 @@ where
     picker: F,
 }
 
-impl<K,V> RawFieldCollex<K,V,fn(&V) -> K>
+impl<K,V> RawFieldAMap<K,V,fn(&V) -> K>
 where
     K: Ord + Real + Into<usize>,
     K: Hash,
-    V: CollexValue<K>,
+    V: AMapValue<K>,
 {
     pub fn new(span: Span<K>, unit: K) -> Result<Self,(Span<K>,K)> {
         Ok(Self{
@@ -54,7 +54,7 @@ where
 }
 
 
-impl<K,V,F> RawFieldCollex<K,V,F>
+impl<K,V,F> RawFieldAMap<K,V,F>
 where
     K: Ord + Real + Into<usize>,
     K: Hash,

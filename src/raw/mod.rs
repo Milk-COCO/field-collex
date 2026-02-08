@@ -1,5 +1,5 @@
 pub mod map;
 pub mod set;
-pub mod collex;
+pub mod amap;
 
 pub use set::RawField;
