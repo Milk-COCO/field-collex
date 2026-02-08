@@ -274,7 +274,7 @@ where
     /// 索引越界时panic
     ///
     /// 指定块为空时panic
-    pub(crate) fn unchecked_replace_key_index(&mut self, idx: usize, key: K) -> K
+    pub fn unchecked_replace_key_index(&mut self, idx: usize, key: K) -> K
     where
         K: Mul<usize, Output = K> + std::fmt::Debug,
     {
