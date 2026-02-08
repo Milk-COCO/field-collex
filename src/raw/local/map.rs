@@ -199,9 +199,11 @@ where
     ///
     /// # Panics
     /// 越界访问时panic
-    pub fn unchecked_get(&self, idx: usize) -> Option<&V> {
+    ///
+    /// 指定块为空时panic
+    pub fn unchecked_get(&self, idx: usize) -> &V {
         // 模块文档脚注1
-        Some(self.values.get(&self.keys.get_in(idx)?).unwrap())
+        self.values.get(&self.keys.unchecked_get(idx)).unwrap()
     }
     
     /// 尝试插入值
@@ -345,7 +347,7 @@ where
     ///
     /// # Panics
     /// 索引越界时panic
-    pub fn remove_index_in(&mut self, idx: usize) -> set::RemoveIndexResult<(K,V)> {
+    pub(crate) fn remove_index_in(&mut self, idx: usize) -> set::RemoveIndexResult<(K,V)> {
         let k = self.keys.remove_index_in(idx)?;
         // 模块文档脚注1
         let v = self.values.remove(&k).unwrap();
