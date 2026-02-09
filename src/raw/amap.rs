@@ -4,7 +4,7 @@ use num_traits::real::Real;
 use span_core::Span;
 use super::{set,map};
 use super::map::RawFieldMap;
-pub use super::map::InsertRawFieldMapError;
+pub use super::map::InsertRawFieldMapError as InsertRawFieldAMapError;
 
 pub trait AMapValue<K>
 where
@@ -193,7 +193,7 @@ where
     /// 若对应块已有值，新值将替换原值，返回Ok(Some(V))包裹原值。<br>
     /// 若无值，插入新值返回 Ok(None)。
     ///
-    pub fn insert(&mut self, value: V) -> Result<Option<V>, InsertRawFieldMapError<V>> {
+    pub fn insert(&mut self, value: V) -> Result<Option<V>, InsertRawFieldAMapError<V>> {
         self.map.insert((self.picker)(&value), value).map(|o| o.map(|v| v.1))
     }
     

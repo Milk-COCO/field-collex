@@ -2,7 +2,6 @@
 //! # 模块脚注
 //! 1. 插入逻辑确保存在Key时就存在value。若存在对应Key而不存在对应Value，那就panic吧，反正基本上只可能是我们的问题。
 
-
 use thiserror::Error;
 use std::hash::Hash;
 use std::mem;
@@ -10,8 +9,7 @@ use ahash::AHashMap;
 use std::ops::Mul;
 use num_traits::real::Real;
 use span_core::Span;
-pub use super::set::{InsertRawFieldSetError, TryInsertRawFieldSetError};
-use super::set::{self, RawField, RawFieldSet};
+use super::set::{self, RawField, RawFieldSet, InsertRawFieldSetError, TryInsertRawFieldSetError};
 
 pub(crate) type ReplaceIndexResult<T> = Result<T, ReplaceIndexRawFieldMapError<T>>;
 
@@ -274,7 +272,7 @@ where
     
     /// 尝试插入值
     ///
-    /// 插入失败会返回 `TryInsertRawFieldSetError` ，使用 `unwrap` 方法得到传入值 `value`。
+    /// 插入失败会返回 `TryInsertRawFieldMapError` ，使用 `unwrap` 方法得到传入值 `value`。
     pub fn try_insert(&mut self, target: K, value: V) -> TryInsertResult<V> {
         match self.keys.try_insert(target) {
             Ok(v) => { v }
