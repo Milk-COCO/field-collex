@@ -63,6 +63,39 @@ impl<V> RawField<V> {
     pub fn next_from(tuple: &(usize, V)) -> Self {
         Self::Next(tuple.0)
     }
+    
+    
+    /// 得到当前或上一个非空块的索引
+    ///
+    /// 若块不为空，返回自己 <br>
+    /// 若块为空且有前一个非空块，返回该块 <br>
+    /// 若块为空且没有前一个非空块，返回None <br>
+    pub fn thing_prev(&self) -> Option<usize> {
+        match self {
+            RawField::Thing(v) => Some(v.0),
+            RawField::Prev(prev)
+            | RawField::Among(prev,..)
+            => Some(*prev),
+            _ => None,
+        }
+    }
+    
+    
+    /// 得到当前或下一个非空块的索引
+    ///
+    /// 若块不为空，返回自己 <br>
+    /// 若块为空且有后一个非空块，返回该块 <br>
+    /// 若块为空且没有后一个非空块，返回None <br>
+    pub fn thing_next(&self) -> Option<usize> {
+        match self {
+            RawField::Thing(v) => Some(v.0),
+            RawField::Next(next)
+            | RawField::Among(_, next)
+            => Some(*next),
+            _ => None,
+        }
+    }
+    
 }
 
 pub(crate) type NewResult<T,V> = Result<T, NewRawFieldSetError<V>>;
@@ -446,41 +479,53 @@ where
         matches!(self.items[self.idx_of(value)], RawField::Thing((_,k)) if k == value)
     }
     
-    /// 通过索引得到值
-    ///
-    /// 若块不为空，返回Some
-    pub fn get(&self,idx: usize) -> Option<V> {
-        let thing = self.thing(idx)?;
-        Some(thing)
+    pub fn get_field(&self, idx: usize) -> Option<&RawField<V>> {
+        if idx < self.items.len() {
+            Some(&self.items[idx])
+        } else {None}
     }
     
-    /// 通过索引得到值，但不进行索引检查
+    /// 通过索引得到当前或上一个非空块的(索引,值)
     ///
-    /// 若块不为空，返回Some
-    ///
-    /// # Panics
-    /// 越界访问时panic
-    pub(crate) fn get_in(&self, idx: usize) -> Option<V> {
-        match self.items[idx] {
-            RawField::Thing(ref t) => Some(t.1),
-            _ => None
-        }
+    /// 若块不为空，返回自己 <br>
+    /// 若块为空且有前一个非空块，返回该块 <br>
+    /// 若块为空且没有前一个非空块，或索引越界，返回None <br>
+    pub fn get_prev(&self, idx: usize) -> Option<(usize,V)> {
+        Some(*self.items[self.get_prev_index(idx)?].as_thing())
     }
     
-    /// 通过索引得到值，但无法获取时panic
+    /// 通过索引得到当前或下一个非空块的(索引,值)
     ///
-    /// 若块不为空，返回Some
-    ///
-    /// # Panics
-    /// 越界访问时panic
-    ///
-    /// 指定块为空时panic
-    pub fn unchecked_get(&self, idx: usize) -> V {
-        match self.items[idx] {
-            RawField::Thing(ref t) => t.1,
-            _ => panic!("Called `RawFieldSet::unchecked_get()` on a empty field")
-        }
+    /// 若块不为空，返回自己 <br>
+    /// 若块为空且有后一个非空块，返回该块 <br>
+    /// 若块为空且没有后一个非空块，或索引越界，返回None <br>
+    pub fn get_next(&self,idx: usize) -> Option<(usize,V)> {
+        Some(*self.items[self.get_next_index(idx)?].as_thing())
     }
+    
+    
+    /// 通过索引得到当前或上一个非空块的索引
+    ///
+    /// 若块不为空，返回自己 <br>
+    /// 若块为空且有前一个非空块，返回该块 <br>
+    /// 若块为空且没有前一个非空块，或索引越界，返回None <br>
+    pub fn get_prev_index(&self, idx: usize) -> Option<usize> {
+        if idx < self.items.len() {
+            self.items[idx].thing_prev()
+        } else { None }
+    }
+    
+    /// 通过索引得到当前或下一个非空块的索引
+    ///
+    /// 若块不为空，返回自己 <br>
+    /// 若块为空且有后一个非空块，返回该块 <br>
+    /// 若块为空且没有后一个非空块，或索引越界，返回None <br>
+    pub fn get_next_index(&self,idx: usize) -> Option<usize> {
+        if idx < self.items.len() {
+            self.items[idx].thing_next()
+        } else { None }
+    }
+    
     
     /// 辅助函数：执行插入/替换后的前后更新逻辑
     pub(crate) fn try_insert_in(

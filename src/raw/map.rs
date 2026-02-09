@@ -230,25 +230,46 @@ where
         self.keys.contains(target)
     }
     
-    /// 通过索引得到块值引用
+    
+    /// 通过索引得到当前或上一个非空块的(索引,键,值引用)
     ///
-    /// 若块不为空，返回Some
-    pub fn get(&self, idx: usize) -> Option<&V> {
+    /// 若块不为空，返回自己 <br>
+    /// 若块为空且有前一个非空块，返回该块 <br>
+    /// 若块为空且没有前一个非空块，或索引越界，返回None <br>
+    pub fn get_prev(&self,idx: usize) -> Option<(usize, K, &V)> {
+        let (index, key) = self.keys.get_prev(idx)?;
         // 模块文档脚注1
-        Some(self.values.get(&self.keys.get(idx)?).unwrap())
+        Some((index, key, self.values.get(&key).unwrap()))
     }
     
-    /// 通过索引得到值引用
+    /// 通过索引得到当前或下一个非空块的(索引,键,值引用)
     ///
-    /// 若块不为空，返回Some
-    ///
-    /// # Panics
-    /// 越界访问时panic
-    ///
-    /// 指定块为空时panic
-    pub fn unchecked_get(&self, idx: usize) -> &V {
+    /// 若块不为空，返回自己 <br>
+    /// 若块为空且有后一个非空块，返回该块 <br>
+    /// 若块为空且没有后一个非空块，或索引越界，返回None <br>
+    pub fn get_next(&self,idx: usize) -> Option<(usize, K, &V)> {
+        let (index, key) = self.keys.get_next(idx)?;
         // 模块文档脚注1
-        self.values.get(&self.keys.unchecked_get(idx)).unwrap()
+        Some((index, key, self.values.get(&key).unwrap()))
+    }
+    
+    
+    /// 通过索引得到当前或上一个非空块的索引
+    ///
+    /// 若块不为空，返回自己 <br>
+    /// 若块为空且有前一个非空块，返回该块 <br>
+    /// 若块为空且没有前一个非空块，或索引越界，返回None <br>
+    pub fn get_prev_index(&self,idx: usize) -> Option<usize> {
+        self.keys.get_prev_index(idx)
+    }
+    
+    /// 通过索引得到当前或下一个非空块的索引
+    ///
+    /// 若块不为空，返回自己 <br>
+    /// 若块为空且有后一个非空块，返回该块 <br>
+    /// 若块为空且没有后一个非空块，或索引越界，返回None <br>
+    pub fn get_next_index(&self,idx: usize) -> Option<usize> {
+        self.keys.get_next_index(idx)
     }
     
     /// 尝试插入值
