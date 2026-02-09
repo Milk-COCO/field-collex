@@ -116,7 +116,7 @@ where
     /// span为Key的范围，unit为每个块的大小，同时也是每个块之间的间隔
     ///
     /// 若unit为0 或 span为空，通过返回Err返还提供的数据
-    pub fn new(span: Span<K>, unit: K) -> Result<Self, (Span<K>, K)> {
+    pub fn new(span: Span<K>, unit: K) -> set::NewResult<Self, K> {
         Ok(Self {
             keys: RawFieldSet::new(span, unit)?,
             values: AHashMap::new()
@@ -128,7 +128,7 @@ where
     /// span为Key的范围，unit为每个块的大小，同时也是每个块之间的间隔
     ///
     /// 若unit为0、span为空、capacity大于最大块数量，通过返回Err返还提供的数据
-    pub fn with_capacity(span: Span<K>, unit: K, capacity: usize) -> Result<Self, (Span<K>, K)> {
+    pub fn with_capacity(span: Span<K>, unit: K, capacity: usize) -> set::WithCapacityResult<Self, K> {
         Ok(Self {
             keys: RawFieldSet::with_capacity(span, unit, capacity)?,
             values: AHashMap::new()
@@ -169,6 +169,51 @@ where
     pub fn is_thing(&self, idx: usize) -> bool {
         self.keys.is_thing(idx)
     }
+    
+    /// 通过索引返回块的键，与值引用
+    ///
+    /// 索引对应块是非空则返回Some，带边界检查，越界视为None
+    pub fn thing_key_value(&self, idx: usize) -> Option<(K,&V)> {
+        let key = self.keys.thing(idx)?;
+        // 模块文档脚注1
+        Some((key, self.values.get(&key).unwrap()))
+    }
+    
+    /// 通过索引返回 块的值 的引用
+    ///
+    /// 索引对应块是非空则返回Some，带边界检查，越界视为None
+    pub fn thing(&self, idx: usize) -> Option<&V> {
+        Some(self.values.get(self.keys.thing_ref(idx)?).unwrap())
+    }
+    
+    /// 通过索引返回 块的值 的可变引用
+    ///
+    /// 索引对应块是非空则返回Some，带边界检查，越界视为None
+    pub fn thing_mut(&mut self, idx: usize) -> Option<&mut V> {
+        Some(self.values.get_mut(self.keys.thing_ref(idx)?).unwrap())
+    }
+    
+    /// 通过索引返回块的键
+    ///
+    /// 索引对应块是非空则返回Some，带边界检查，越界视为None
+    pub fn thing_key(&self, idx: usize) -> Option<K> {
+        self.keys.thing(idx)
+    }
+    
+    /// 通过索引返回块的键
+    ///
+    /// 索引对应块是非空则返回Some，带边界检查，越界视为None
+    pub fn thing_key_ref(&self, idx: usize) -> Option<&K> {
+        self.keys.thing_ref(idx)
+    }
+    
+    /// 通过索引返回 块的键 的可变引用
+    ///
+    /// 索引对应块是非空则返回Some，带边界检查，越界视为None
+    pub fn thing_key_mut(&mut self, idx: usize) -> Option<&mut K> {
+        self.keys.thing_mut(idx)
+    }
+    
     
     /// 计算指定值对应的块索引
     ///

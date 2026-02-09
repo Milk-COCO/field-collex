@@ -65,6 +65,51 @@ impl<V> RawField<V> {
     }
 }
 
+pub(crate) type NewResult<T,V> = Result<T, NewRawFieldSetError<V>>;
+
+#[derive(Error, Debug)]
+pub enum NewRawFieldSetError<V>{
+    #[error("提供的 span 为空（大小为0）")]
+    EmptySpan(Span<V>, V),
+    #[error("提供的 unit 为0")]
+    ZeroUnit(Span<V>, V),
+}
+
+impl<V> NewRawFieldSetError<V>{
+    pub fn unwrap(self) -> (Span<V>, V) {
+        match self {
+            Self::ZeroUnit(span, unit)
+            | Self::EmptySpan(span, unit)
+            => (span, unit)
+        }
+    }
+}
+
+
+pub(crate) type WithCapacityResult<T,V> = Result<T, WithCapacityRawFieldSetError<V>>;
+
+#[derive(Error, Debug)]
+pub enum WithCapacityRawFieldSetError<V>{
+    #[error("提供的 span 为空（大小为0）")]
+    EmptySpan(Span<V>, V),
+    #[error("提供的 unit 为0")]
+    ZeroUnit(Span<V>, V),
+    #[error("提供的 capacity 超过最大块数量")]
+    OutOfSize(Span<V>, V),
+}
+
+impl<V> WithCapacityRawFieldSetError<V>{
+    pub fn unwrap(self) -> (Span<V>, V) {
+        match self {
+            Self::ZeroUnit(span, unit)
+            | Self::EmptySpan(span, unit)
+            | Self::OutOfSize(span, unit)
+            => (span, unit)
+        }
+    }
+}
+
+
 pub(crate) type FindMatcherResult<T> = Result<T, FindMatcherRawFieldSetError>;
 
 #[derive(Error, Debug)]
@@ -236,9 +281,13 @@ where
     /// span为Key的范围，unit为每个块的大小，同时也是每个块之间的间隔
     ///
     /// 若unit为0 或 span为空，通过返回Err返还提供的数据
-    pub fn new(span: Span<V>, unit: V) -> Result<Self,(Span<V>, V)> {
-        if unit.is_zero() || span.is_empty() {
-            Err((span, unit))
+    pub fn new(span: Span<V>, unit: V) -> NewResult<Self,V> {
+        use NewRawFieldSetError::*;
+        
+        if unit.is_zero() {
+            Err(ZeroUnit(span, unit))
+        } else if span.is_empty() {
+            Err(EmptySpan(span, unit))
         } else {
             Ok(Self {
                 span,
@@ -253,16 +302,21 @@ where
     /// span为Key的范围，unit为每个块的大小，同时也是每个块之间的间隔
     ///
     /// 若unit为0、span为空、capacity大于最大块数量，通过返回Err返还提供的数据
-    pub fn with_capacity(span: Span<V>, unit: V, capacity: usize) -> Result<Self,(Span<V>, V)> {
-        if unit.is_zero() || span.is_empty() ||
-            match span.size(){
-                Ok(Some(size)) => {
-                    capacity > (size / unit).ceil().into()
-                },
-                Ok(None) => {false}
-                _ => {return Err((span, unit));}
-            } {
-            Err((span, unit))
+    pub fn with_capacity(span: Span<V>, unit: V, capacity: usize) -> WithCapacityResult<Self,V> {
+        use WithCapacityRawFieldSetError::*;
+        if unit.is_zero() {
+            Err(ZeroUnit(span, unit))
+        } else if span.is_empty() {
+            Err(EmptySpan(span, unit))
+        } else if match span.size(){
+            Ok(Some(size)) => {
+                capacity > (size / unit).ceil().into()
+            },
+            Ok(None) => {false}
+            // is_empty为真时，永远不可能出现Err，因为它绝对有长度
+            _ => unreachable!()
+        } {
+            Err(OutOfSize(span, unit))
         } else {
             Ok(Self {
                 span,
@@ -324,25 +378,37 @@ where
         } else { false }
     }
     
-    /// 返回引用
+    /// 通过索引返回块内数据
     ///
-    /// 索引对应块是非空则返回Some，带边界检查
-    pub(crate) fn as_thing(&self, idx: usize) -> Option<(usize, V)> {
+    /// 索引对应块是非空则返回Some，带边界检查，越界视为None
+    pub fn thing(&self, idx: usize) -> Option<V> {
         if idx < self.items.len() {
             match self.items[idx] {
-                RawField::Thing(ref v) => Some(*v),
+                RawField::Thing(ref v) => Some(v.1),
                 _ => None
             }
         } else { None }
     }
     
-    /// 返回引用
+    /// 通过索引返回块内数据引用
     ///
-    /// 索引对应块是非空则返回Some，带边界检查
-    pub(crate) fn as_thing_mut(&mut self, idx: usize) -> Option<&mut (usize, V)> {
+    /// 索引对应块是非空则返回Some，带边界检查，越界视为None
+    pub fn thing_ref(&self, idx: usize) -> Option<&V> {
         if idx < self.items.len() {
             match self.items[idx] {
-                RawField::Thing(ref mut v) => Some(v),
+                RawField::Thing(ref v) => Some(&v.1),
+                _ => None
+            }
+        } else { None }
+    }
+    
+    /// 通过索引返回块内数据可变引用
+    ///
+    /// 索引对应块是非空则返回Some，带边界检查，越界视为None
+    pub fn thing_mut(&mut self, idx: usize) -> Option<&mut V> {
+        if idx < self.items.len() {
+            match self.items[idx] {
+                RawField::Thing(ref mut v) => Some(&mut v.1),
                 _ => None
             }
         } else { None }
@@ -384,8 +450,8 @@ where
     ///
     /// 若块不为空，返回Some
     pub fn get(&self,idx: usize) -> Option<V> {
-        let thing = self.as_thing(idx)?;
-        Some(thing.1)
+        let thing = self.thing(idx)?;
+        Some(thing)
     }
     
     /// 通过索引得到值，但不进行索引检查
@@ -485,10 +551,10 @@ where
         
         let idx = self.idx_of(target);
         
-        if let Some(thing) = self.as_thing_mut(idx){
+        if let Some(thing) = self.thing_mut(idx){
             // 已存在，则替换并返回其原值
-            let old = thing.1;
-            thing.1 = target;
+            let old = *thing;
+            *thing = target;
             Ok(Some(old))
         } else {
             // 同 try_insert

@@ -38,14 +38,14 @@ where
     K: Hash,
     V: AMapValue<K>,
 {
-    pub fn new(span: Span<K>, unit: K) -> Result<Self,(Span<K>,K)> {
+    pub fn new(span: Span<K>, unit: K) -> set::NewResult<Self, K> {
         Ok(Self{
             map: RawFieldMap::new(span, unit)?,
             picker: V::pick,
         })
     }
     
-    pub fn with_capacity(span: Span<K>, unit: K, capacity: usize) -> Result<Self,(Span<K>,K)> {
+    pub fn with_capacity(span: Span<K>, unit: K, capacity: usize) -> set::WithCapacityResult<Self, K> {
         Ok(Self{
             map: RawFieldMap::with_capacity(span, unit, capacity)?,
             picker: V::pick,
@@ -60,14 +60,14 @@ where
     K: Hash,
     F: Fn(&V) -> K
 {
-    pub fn with_picker(span: Span<K>, unit: K, picker: F) -> Result<Self, (Span<K>, K)> {
+    pub fn with_picker(span: Span<K>, unit: K, picker: F) -> set::NewResult<Self, K> {
         Ok(Self {
             map: RawFieldMap::new(span, unit)?,
             picker,
         })
     }
     
-    pub fn with_capacity_picker(span: Span<K>, unit: K, capacity: usize, picker: F) -> Result<Self, (Span<K>, K)> {
+    pub fn with_capacity_picker(span: Span<K>, unit: K, capacity: usize, picker: F) -> set::WithCapacityResult<Self, K> {
         Ok(Self {
             map: RawFieldMap::with_capacity(span, unit, capacity)?,
             picker,
@@ -108,6 +108,21 @@ where
     pub fn is_thing(&self, idx: usize) -> bool {
         self.map.is_thing(idx)
     }
+    
+    /// 通过索引返回 块的值 的引用
+    ///
+    /// 索引对应块是非空则返回Some，带边界检查，越界视为None
+    pub fn thing(&self, idx: usize) -> Option<&V> {
+        self.map.thing(idx)
+    }
+    
+    /// 通过索引返回 块的值 的可变引用
+    ///
+    /// 索引对应块是非空则返回Some，带边界检查，越界视为None
+    pub fn thing_mut(&mut self, idx: usize) -> Option<&mut V> {
+        self.map.thing_mut(idx)
+    }
+    
     
     /// 计算指定值对应的块索引
     ///
