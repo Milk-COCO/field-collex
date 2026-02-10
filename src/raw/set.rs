@@ -527,6 +527,28 @@ where
     }
     
     
+    /// 找到第一个非空块的(键,值)，即第一个元素
+    pub fn first(&self) -> Option<(usize,V)> {
+        self.get_next(0)
+    }
+    
+    /// 找到最后一个非空块的(键,值)，即最后一个元素
+    pub fn last(&self) -> Option<(usize,V)> {
+        self.get_prev(self.items.len() - 1)
+    }
+    
+    
+    /// 找到第一个非空块的索引
+    pub fn first_index(&self) -> Option<usize> {
+        self.get_next_index(0)
+    }
+    
+    /// 找到最后一个非空块的索引
+    pub fn last_index(&self) -> Option<usize> {
+        self.get_prev_index(self.items.len() - 1)
+    }
+    
+    
     /// 辅助函数：执行插入/替换后的前后更新逻辑
     pub(crate) fn try_insert_in(
         &mut self,

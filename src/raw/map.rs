@@ -270,6 +270,28 @@ where
         self.keys.get_next_index(idx)
     }
     
+    
+    /// 找到第一个非空块的(索引,键,值引用)
+    pub fn first(&self) -> Option<(usize, K, &V)> {
+        self.get_next(0)
+    }
+    
+    /// 找到最后一个非空块的(索引,键,值引用)
+    pub fn last(&self) -> Option<(usize, K, &V)> {
+        self.get_prev(self.len() - 1)
+    }
+    
+    /// 找到第一个非空块的索引
+    pub fn first_index(&self) -> Option<usize> {
+        self.keys.first_index()
+    }
+    
+    /// 找到最后一个非空块的索引
+    pub fn last_index(&self) -> Option<usize> {
+        self.keys.last_index()
+    }
+    
+    
     /// 尝试插入值
     ///
     /// 插入失败会返回 `TryInsertRawFieldMapError` ，使用 `unwrap` 方法得到传入值 `value`。

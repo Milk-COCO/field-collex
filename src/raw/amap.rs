@@ -184,6 +184,27 @@ where
     }
     
     
+    /// 找到第一个非空块的(索引,值引用)
+    pub fn first(&self) -> Option<(usize, &V)> {
+        self.get_next(0)
+    }
+    
+    /// 找到最后一个非空块的(索引,值引用)
+    pub fn last(&self) -> Option<(usize, &V)> {
+        self.get_prev(self.len() - 1)
+    }
+    
+    /// 找到第一个非空块的索引
+    pub fn first_index(&self) -> Option<usize> {
+        self.map.first_index()
+    }
+    
+    /// 找到最后一个非空块的索引
+    pub fn last_index(&self) -> Option<usize> {
+        self.map.last_index()
+    }
+    
+    
     pub fn try_insert(&mut self, value: V) -> map::TryInsertResult<V> {
         self.map.try_insert((self.picker)(&value), value)
     }
