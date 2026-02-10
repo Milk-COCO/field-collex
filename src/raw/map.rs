@@ -171,8 +171,8 @@ where
     /// 通过索引返回块的键，与值引用
     ///
     /// 索引对应块是非空则返回Some，带边界检查，越界视为None
-    pub fn thing_key_value(&self, idx: usize) -> Option<(K,&V)> {
-        let key = self.keys.thing(idx)?;
+    pub fn get_key_value(&self, idx: usize) -> Option<(K, &V)> {
+        let key = self.keys.get(idx)?;
         // 模块文档脚注1
         Some((key, self.values.get(&key).unwrap()))
     }
@@ -180,36 +180,36 @@ where
     /// 通过索引返回 块的值 的引用
     ///
     /// 索引对应块是非空则返回Some，带边界检查，越界视为None
-    pub fn thing(&self, idx: usize) -> Option<&V> {
-        Some(self.values.get(self.keys.thing_ref(idx)?).unwrap())
+    pub fn get(&self, idx: usize) -> Option<&V> {
+        Some(self.values.get(self.keys.get_ref(idx)?).unwrap())
     }
     
     /// 通过索引返回 块的值 的可变引用
     ///
     /// 索引对应块是非空则返回Some，带边界检查，越界视为None
-    pub fn thing_mut(&mut self, idx: usize) -> Option<&mut V> {
-        Some(self.values.get_mut(self.keys.thing_ref(idx)?).unwrap())
+    pub fn get_mut(&mut self, idx: usize) -> Option<&mut V> {
+        Some(self.values.get_mut(self.keys.get_ref(idx)?).unwrap())
     }
     
     /// 通过索引返回块的键
     ///
     /// 索引对应块是非空则返回Some，带边界检查，越界视为None
-    pub fn thing_key(&self, idx: usize) -> Option<K> {
-        self.keys.thing(idx)
+    pub fn get_key(&self, idx: usize) -> Option<K> {
+        self.keys.get(idx)
     }
     
     /// 通过索引返回块的键
     ///
     /// 索引对应块是非空则返回Some，带边界检查，越界视为None
-    pub fn thing_key_ref(&self, idx: usize) -> Option<&K> {
-        self.keys.thing_ref(idx)
+    pub fn get_key_ref(&self, idx: usize) -> Option<&K> {
+        self.keys.get_ref(idx)
     }
     
     /// 通过索引返回 块的键 的可变引用
     ///
     /// 索引对应块是非空则返回Some，带边界检查，越界视为None
-    pub fn thing_key_mut(&mut self, idx: usize) -> Option<&mut K> {
-        self.keys.thing_mut(idx)
+    pub fn get_key_mut(&mut self, idx: usize) -> Option<&mut K> {
+        self.keys.get_mut(idx)
     }
     
     

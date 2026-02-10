@@ -112,15 +112,15 @@ where
     /// 通过索引返回 块的值 的引用
     ///
     /// 索引对应块是非空则返回Some，带边界检查，越界视为None
-    pub fn thing(&self, idx: usize) -> Option<&V> {
-        self.map.thing(idx)
+    pub fn get(&self, idx: usize) -> Option<&V> {
+        self.map.get(idx)
     }
     
     /// 通过索引返回 块的值 的可变引用
     ///
     /// 索引对应块是非空则返回Some，带边界检查，越界视为None
-    pub fn thing_mut(&mut self, idx: usize) -> Option<&mut V> {
-        self.map.thing_mut(idx)
+    pub fn get_mut(&mut self, idx: usize) -> Option<&mut V> {
+        self.map.get_mut(idx)
     }
     
     

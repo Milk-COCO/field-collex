@@ -414,7 +414,7 @@ where
     /// 通过索引返回块内数据
     ///
     /// 索引对应块是非空则返回Some，带边界检查，越界视为None
-    pub fn thing(&self, idx: usize) -> Option<V> {
+    pub fn get(&self, idx: usize) -> Option<V> {
         if idx < self.items.len() {
             match self.items[idx] {
                 RawField::Thing(ref v) => Some(v.1),
@@ -426,7 +426,7 @@ where
     /// 通过索引返回块内数据引用
     ///
     /// 索引对应块是非空则返回Some，带边界检查，越界视为None
-    pub fn thing_ref(&self, idx: usize) -> Option<&V> {
+    pub fn get_ref(&self, idx: usize) -> Option<&V> {
         if idx < self.items.len() {
             match self.items[idx] {
                 RawField::Thing(ref v) => Some(&v.1),
@@ -438,7 +438,7 @@ where
     /// 通过索引返回块内数据可变引用
     ///
     /// 索引对应块是非空则返回Some，带边界检查，越界视为None
-    pub fn thing_mut(&mut self, idx: usize) -> Option<&mut V> {
+    pub fn get_mut(&mut self, idx: usize) -> Option<&mut V> {
         if idx < self.items.len() {
             match self.items[idx] {
                 RawField::Thing(ref mut v) => Some(&mut v.1),
@@ -596,7 +596,7 @@ where
         
         let idx = self.idx_of(target);
         
-        if let Some(thing) = self.thing_mut(idx){
+        if let Some(thing) = self.get_mut(idx){
             // 已存在，则替换并返回其原值
             let old = *thing;
             *thing = target;
