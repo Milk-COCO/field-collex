@@ -150,7 +150,8 @@ where
     ///
     /// 若块不为空，返回自己 <br>
     /// 若块为空且有前一个非空块，返回该块 <br>
-    /// 若块为空且没有前一个非空块，或索引越界，返回None <br>
+    /// 若块为空且没有前一个非空块，返回None <br>
+    /// 提供的索引大于最后一个块，相当于最后一个块 <br>
     pub fn get_prev(&self,idx: usize) -> Option<(usize, &V)> {
         self.map.get_prev(idx).map(|t| (t.0,t.2))
     }
@@ -159,7 +160,8 @@ where
     ///
     /// 若块不为空，返回自己 <br>
     /// 若块为空且有后一个非空块，返回该块 <br>
-    /// 若块为空且没有后一个非空块，或索引越界，返回None <br>
+    /// 若块为空且没有后一个非空块，返回None <br>
+    /// 提供的索引大于最后一个块，返回None <br>
     pub fn get_next(&self,idx: usize) -> Option<(usize, &V)> {
         self.map.get_next(idx).map(|t| (t.0,t.2))
     }
@@ -169,7 +171,8 @@ where
     ///
     /// 若块不为空，返回自己 <br>
     /// 若块为空且有前一个非空块，返回该块 <br>
-    /// 若块为空且没有前一个非空块，或索引越界，返回None <br>
+    /// 若块为空且没有前一个非空块，返回None <br>
+    /// 提供的索引大于最后一个块，相当于最后一个块 <br>
     pub fn get_prev_index(&self,idx: usize) -> Option<usize> {
         self.map.get_prev_index(idx)
     }
@@ -178,7 +181,8 @@ where
     ///
     /// 若块不为空，返回自己 <br>
     /// 若块为空且有后一个非空块，返回该块 <br>
-    /// 若块为空且没有后一个非空块，或索引越界，返回None <br>
+    /// 若块为空且没有后一个非空块，返回None <br>
+    /// 提供的索引大于最后一个块，返回None <br>
     pub fn get_next_index(&self,idx: usize) -> Option<usize> {
         self.map.get_next_index(idx)
     }

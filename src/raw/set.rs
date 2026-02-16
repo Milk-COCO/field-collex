@@ -411,6 +411,17 @@ where
         } else { false }
     }
     
+    /// 通过索引返回块内数据，不进行任何检查
+    ///
+    /// # Panics
+    /// 索引对应块是空、索引越界时panic
+    pub fn unchecked_get(&self, idx: usize) -> Option<V> {
+        match self.items[idx] {
+            RawField::Thing(ref v) => Some(v.1),
+            _ => panic!("Called RawFieldSet::unchecked_get() on a empty field")
+        }
+    }
+    
     /// 通过索引返回块内数据
     ///
     /// 索引对应块是非空则返回Some，带边界检查，越界视为None
@@ -489,7 +500,8 @@ where
     ///
     /// 若块不为空，返回自己 <br>
     /// 若块为空且有前一个非空块，返回该块 <br>
-    /// 若块为空且没有前一个非空块，或索引越界，返回None <br>
+    /// 若块为空且没有前一个非空块，返回None <br>
+    /// 提供的索引大于最后一个块，相当于最后一个块 <br>
     pub fn get_prev(&self, idx: usize) -> Option<(usize,V)> {
         Some(*self.items[self.get_prev_index(idx)?].as_thing())
     }
@@ -498,7 +510,8 @@ where
     ///
     /// 若块不为空，返回自己 <br>
     /// 若块为空且有后一个非空块，返回该块 <br>
-    /// 若块为空且没有后一个非空块，或索引越界，返回None <br>
+    /// 若块为空且没有后一个非空块，返回None <br>
+    /// 提供的索引大于最后一个块，返回None <br>
     pub fn get_next(&self,idx: usize) -> Option<(usize,V)> {
         Some(*self.items[self.get_next_index(idx)?].as_thing())
     }
@@ -508,18 +521,23 @@ where
     ///
     /// 若块不为空，返回自己 <br>
     /// 若块为空且有前一个非空块，返回该块 <br>
-    /// 若块为空且没有前一个非空块，或索引越界，返回None <br>
+    /// 若块为空且没有前一个非空块，返回None <br>
+    /// 提供的索引大于最后一个块，相当于最后一个块 <br>
     pub fn get_prev_index(&self, idx: usize) -> Option<usize> {
         if idx < self.items.len() {
             self.items[idx].thing_prev()
-        } else { None }
+        } else {
+            self.items.last()?.thing_prev() 
+        }
+        
     }
     
     /// 通过索引得到当前或下一个非空块的索引
     ///
     /// 若块不为空，返回自己 <br>
     /// 若块为空且有后一个非空块，返回该块 <br>
-    /// 若块为空且没有后一个非空块，或索引越界，返回None <br>
+    /// 若块为空且没有后一个非空块，返回None <br>
+    /// 提供的索引大于最后一个块，返回None <br>
     pub fn get_next_index(&self,idx: usize) -> Option<usize> {
         if idx < self.items.len() {
             self.items[idx].thing_next()
@@ -527,25 +545,25 @@ where
     }
     
     
-    /// 找到第一个非空块的(键,值)，即第一个元素
+    /// 找到第一个非空块的(索引,值)，即第一个元素
     pub fn first(&self) -> Option<(usize,V)> {
-        self.get_next(0)
+        Some(*self.items[self.first_index()?].as_thing())
     }
     
-    /// 找到最后一个非空块的(键,值)，即最后一个元素
+    /// 找到最后一个非空块的(索引,值)，即最后一个元素
     pub fn last(&self) -> Option<(usize,V)> {
-        self.get_prev(self.items.len() - 1)
+        Some(*self.items[self.last_index()?].as_thing())
     }
     
     
     /// 找到第一个非空块的索引
     pub fn first_index(&self) -> Option<usize> {
-        self.get_next_index(0)
+        self.items.first()?.thing_prev()
     }
     
     /// 找到最后一个非空块的索引
     pub fn last_index(&self) -> Option<usize> {
-        self.get_prev_index(self.items.len() - 1)
+        self.items.last()?.thing_prev()
     }
     
     
