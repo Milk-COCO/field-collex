@@ -688,7 +688,8 @@ where
                             };
                         
                         // 更新自己
-                        let _ = mem::replace(&mut this.items[idx], maker());
+                        let old = mem::replace(&mut this.items[idx], maker());
+                        debug_assert!(matches!(old, RawField::Thing((i,FieldIn::Elem(v))) if v == target && i == idx));
                         
                         // 向前更新
                         this.items[0..idx].iter_mut().rev()
