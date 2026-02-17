@@ -120,6 +120,37 @@ impl<V> RawField<V> {
             }),
         }
     }
+    
+    /// 得到当前或上一个非空块的索引，使用变体区分
+    ///
+    /// 若块不为空，返回Some(Ok) <br>
+    /// 若块为空且有前一个非空块，返回Some(Err) <br>
+    /// 若块为空且没有前一个非空块，返回None <br>
+    pub fn thing_or_prev(&self) -> Option<Result<usize,usize>> {
+        match self {
+            RawField::Thing(v) => Some(Ok(v.0)),
+            RawField::Prev(prev)
+            | RawField::Among(prev,..)
+            => Some(Err(*prev)),
+            _ => None,
+        }
+    }
+    
+    /// 得到当前或下一个非空块的索引，使用变体区分
+    ///
+    /// 若块不为空，返回Some(Ok) <br>
+    /// 若块为空且有后一个非空块，返回Some(Err) <br>
+    /// 若块为空且没有后一个非空块，返回None <br>
+    pub fn thing_or_next(&self) -> Option<Result<usize,usize>> {
+        match self {
+            RawField::Thing(v) => Some(Ok(v.0)),
+            RawField::Next(next)
+            | RawField::Among(_, next)
+            => Some(Err(*next)),
+            _ => None,
+        }
+    }
+    
 }
 
 impl<V> Clone for RawField<V> {
@@ -266,7 +297,7 @@ macro_rules! impl_from_get_index_err {
 
 impl_from_get_index_err!(FindFieldSetError);
 impl_from_get_index_err!(ReplaceFieldSetError, EmptyField);
-impl_from_get_index_err!(RemoveFieldSetError, EmptyField);
+impl_from_get_index_err!(RemoveFieldSetError, CannotFind);
 
 
 pub(crate) type FindResult<T> = Result<T, FindFieldSetError>;
@@ -333,13 +364,13 @@ pub enum RemoveFieldSetError {
     #[error("无匹配的数据")]
     CannotFind,
     #[error("指定的块已为空块")]
-    EmptyField,
+    NotExist,
 }
 
 impl From<RemoveIndexFieldSetError> for RemoveFieldSetError {
     fn from(value: RemoveIndexFieldSetError) -> Self {
         match value {
-            RemoveIndexFieldSetError::EmptyField => {Self::EmptyField}
+            RemoveIndexFieldSetError::EmptyField => {Self::NotExist }
         }
     }
 }
@@ -601,6 +632,207 @@ where
     /// 找到最后一个非空块的索引
     pub(crate) fn last_index(&self) -> Option<usize> {
         self.items.last()?.thing_prev()
+    }
+    
+    
+    fn remove_rec(this: &mut Self, target: V, idx: usize) -> RemoveResult<()> {
+        use RemoveFieldSetError::*;
+        let items = &mut this.items;
+        if let RawField::Thing(ref mut t) = items[idx] {
+            match t.1 {
+                Field::Elem(e) => {
+                    if e != target {
+                        Err(NotExist)
+                    } else {
+                        // 删除的逻辑
+                        let len = this.items.len();
+                        // 根据上一个元素与下一个元素，生成填充元素
+                        let next =
+                            if idx == len-1 {
+                                None
+                            } else {
+                                match &this.items[idx + 1] {
+                                    RawField::Thing(thing) => Some(thing.0),
+                                    RawField::Prev(_)
+                                    | RawField::Void => None,
+                                    RawField::Among(_, next)
+                                    | RawField::Next(next) => Some(*next),
+                                }
+                            };
+                        
+                        let prev =
+                            if idx == 0 {
+                                None
+                            } else {
+                                match &this.items[idx - 1] {
+                                    RawField::Thing(thing) => Some(thing.0),
+                                    RawField::Next(_)
+                                    | RawField::Void => None,
+                                    RawField::Among(prev, _)
+                                    | RawField::Prev(prev) => Some(*prev),
+                                }
+                            };
+                        
+                        let maker = ||
+                            match next {
+                                None =>
+                                    match prev {
+                                        None => RawField::Void,
+                                        Some(prev) => RawField::Prev(prev),
+                                    },
+                                Some(next) =>
+                                    match prev {
+                                        None => RawField::Next(next),
+                                        Some(prev) => RawField::Among(prev, next),
+                                    },
+                            };
+                        
+                        // 更新自己
+                        let _ = mem::replace(&mut this.items[idx], maker());
+                        
+                        // 向前更新
+                        this.items[0..idx].iter_mut().rev()
+                            .take_while(|v| !matches!(v, RawField::Thing(_)) )
+                            .for_each(|v| {
+                                *v = maker();
+                            });
+                        
+                        // 向后更新
+                        this.items[idx+1..len].iter_mut()
+                            .take_while(|v| !matches!(v, RawField::Thing(_)) )
+                            .for_each(|v| {
+                                *v = maker();
+                            });
+                        
+                        Ok(())
+                    }
+                }
+                Field::Collex(ref mut set) => {
+                    // 循环直到到最里面那层。
+                    Self::remove_rec(set,target,set.idx_of(target))
+                }
+            }
+        } else {
+            Err(NotExist)
+        }
+    }
+    
+    /// 删除对应值
+    pub fn remove(&mut self, target: V) -> RemoveResult<()> {
+        let idx = self.get_index(target)
+            .map_err(Into::<RemoveFieldSetError>::into)?;
+        Self::remove_rec(self,target,idx)
+    }
+    
+    pub fn find_gt(&self, target: V) -> FindResult<V> {
+        self.find_in(
+            target,
+            |idx| idx+1 ,
+            |f| f.thing_or_next(),
+            |f,v| f.last().gt(v)
+        )
+    }
+    
+    
+    pub fn find_ge(&self, target: V) -> FindResult<V> {
+        self.find_in(
+            target,
+            |idx| idx+1 ,
+            |f| f.thing_or_next(),
+            |f,v| f.last().ge(v)
+        )
+    }
+    
+    pub fn find_lt(&self, target: V) -> FindResult<V> {
+        self.find_in(
+            target,
+            |idx| idx-1 ,
+            |f| f.thing_or_prev(),
+            |f,v| f.first().lt(v)
+        )
+    }
+    
+    
+    pub fn find_le(&self, target: V) -> FindResult<V> {
+        self.find_in(
+            target,
+            |idx| idx-1 ,
+            |f| f.thing_or_prev(),
+            |f,v| f.first().le(v)
+        )
+    }
+    
+    /// 找到最近的大于 target 的值
+    ///
+    pub(crate) fn find_in(
+        &self,
+        target: V,
+        next: fn(usize) -> usize,
+        getter: fn(&SetField<V>) -> Option<Result<usize, usize>>,
+        cmp: fn(&FieldIn<V>, &V) -> bool
+    ) -> FindResult<V> {
+        use FindFieldSetError::*;
+        
+        let t_idx = self.get_index(target)
+            .map_err(Into::<FindFieldSetError>::into)?;
+        // 上面get_index内已经判空。
+        // 结果落在t位 -> t位的最大值(大于)t -> t位已经足够，进入t位
+        //           -> t位的最大值不(大于)t -> t+1位必然超过t位，进入下一位
+        // 结果落在非t位 -> 必然超过t位，进入此位
+        let f_idx = match getter(&self.items[t_idx]).ok_or(CannotFind)? {
+            Ok(idx) => {
+                if cmp(&self.items[idx].as_thing().1, &target) {
+                    idx
+                } else {
+                    if self.is_edge(idx) {
+                        return Err(CannotFind)
+                    } else {
+                        next(idx)
+                    }
+                }
+            }
+            Err(idx) => {
+                idx
+            }
+        };
+        
+        // 必然是thing
+        match self.items[f_idx].as_thing().1 {
+            Field::Elem(e) => {Ok(*e)}
+            Field::Collex(set) => {
+                set.find_in(
+                    target,
+                    next,
+                    getter,
+                    cmp
+                )}
+        }
+    }
+    
+    /// 判断本容器是否为空
+    ///
+    /// 为空不意味着内存占用为0。
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty() && matches!(self.items[0], RawField::Void)
+    }
+    
+    pub(crate) fn is_edge(&self, idx: usize) -> bool {
+        idx == 0 || idx == self.len()-1
+    }
+    
+    /// 计算指定值对应的块索引，但是带通用前置检查
+    ///
+    /// 获取值对应的索引。
+    pub(crate) fn get_index(
+        &self,
+        target: V,
+    ) -> GetIndexResult<usize> {
+        use GetIndexFieldSetError::*;
+        if self.is_empty() { return Err(Empty) }
+        let span = &self.span;
+        if !span.contains(&target) { return Err(OutOfSpan); }
+        
+        Ok(self.idx_of(target).min(self.len() - 1))
     }
     
 }
