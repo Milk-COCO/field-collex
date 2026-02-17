@@ -371,7 +371,7 @@ where
 {
     pub(crate) span: Span<V>,
     pub(crate) unit: V,
-    pub(crate) items: Vec<RawField<FieldIn<V>>>,
+    pub(crate) items: Vec<SetField<V>>,
     
 }
 
@@ -470,30 +470,6 @@ where
         } else { false }
     }
     
-    /// 通过索引返回块内数据引用
-    ///
-    /// 索引对应块是非空则返回Some，带边界检查，越界视为None
-    pub fn get_ref(&self, idx: usize) -> Option<&FieldIn<V>> {
-        if idx < self.items.len() {
-            match self.items[idx] {
-                RawField::Thing(ref v) => Some(&v.1),
-                _ => None
-            }
-        } else { None }
-    }
-    
-    /// 通过索引返回块内数据可变引用
-    ///
-    /// 索引对应块是非空则返回Some，带边界检查，越界视为None
-    pub fn get_mut(&mut self, idx: usize) -> Option<&mut FieldIn<V>> {
-        if idx < self.items.len() {
-            match self.items[idx] {
-                RawField::Thing(ref mut v) => Some(&mut v.1),
-                _ => None
-            }
-        } else { None }
-    }
-    
     /// 计算指定值对应的块索引
     ///
     /// 此无任何前置检查，只会机械地返回目标相对于初始位置（区间的左端点）可能处于第几个块，但不确保这个块是否合法。<br>
@@ -535,10 +511,16 @@ where
         }
     }
     
-    pub fn get_field(&self, idx: usize) -> Option<&RawField<FieldIn<V>>> {
+    /// 通过索引返回块引用
+    ///
+    /// 索引对应块是非空则返回Some，带边界检查，越界视为None
+    pub fn get_field(&self, idx: usize) -> Option<&FieldIn<V>> {
         if idx < self.items.len() {
-            Some(&self.items[idx])
-        } else {None}
+            match self.items[idx] {
+                RawField::Thing(ref v) => Some(&v.1),
+                _ => None
+            }
+        } else { None }
     }
     
     
@@ -548,7 +530,7 @@ where
     /// 若块为空且有前一个非空块，返回该块 <br>
     /// 若块为空且没有前一个非空块，返回None <br>
     /// 提供的索引大于最后一个块，相当于最后一个块 <br>
-    pub fn get_prev(&self, idx: usize) -> Option<(usize,&FieldIn<V>)> {
+    pub fn get_prev_field(&self, idx: usize) -> Option<(usize,&FieldIn<V>)> {
         Some(self.items[self.get_prev_index(idx)?].as_thing())
     }
     
@@ -558,7 +540,7 @@ where
     /// 若块为空且有后一个非空块，返回该块 <br>
     /// 若块为空且没有后一个非空块，返回None <br>
     /// 提供的索引大于最后一个块，返回None <br>
-    pub fn get_next(&self,idx: usize) -> Option<(usize,&FieldIn<V>)> {
+    pub fn get_next_field(&self,idx: usize) -> Option<(usize,&FieldIn<V>)> {
         Some(self.items[self.get_next_index(idx)?].as_thing())
     }
     
