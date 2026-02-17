@@ -464,7 +464,7 @@ where
     }
     
     /// 判断对应块是非空
-    pub fn is_thing(&self, idx: usize) -> bool {
+    pub(crate) fn is_thing(&self, idx: usize) -> bool {
         if idx < self.items.len() {
             matches!(self.items[idx], RawField::Thing(_))
         } else { false }
@@ -514,7 +514,7 @@ where
     /// 通过索引返回块引用
     ///
     /// 索引对应块是非空则返回Some，带边界检查，越界视为None
-    pub fn get_field(&self, idx: usize) -> Option<&FieldIn<V>> {
+    pub(crate) fn get_field(&self, idx: usize) -> Option<&FieldIn<V>> {
         if idx < self.items.len() {
             match self.items[idx] {
                 RawField::Thing(ref v) => Some(&v.1),
@@ -530,7 +530,7 @@ where
     /// 若块为空且有前一个非空块，返回该块 <br>
     /// 若块为空且没有前一个非空块，返回None <br>
     /// 提供的索引大于最后一个块，相当于最后一个块 <br>
-    pub fn get_prev_field(&self, idx: usize) -> Option<(usize,&FieldIn<V>)> {
+    pub(crate) fn get_prev_field(&self, idx: usize) -> Option<(usize,&FieldIn<V>)> {
         Some(self.items[self.get_prev_index(idx)?].as_thing())
     }
     
@@ -540,7 +540,7 @@ where
     /// 若块为空且有后一个非空块，返回该块 <br>
     /// 若块为空且没有后一个非空块，返回None <br>
     /// 提供的索引大于最后一个块，返回None <br>
-    pub fn get_next_field(&self,idx: usize) -> Option<(usize,&FieldIn<V>)> {
+    pub(crate) fn get_next_field(&self,idx: usize) -> Option<(usize,&FieldIn<V>)> {
         Some(self.items[self.get_next_index(idx)?].as_thing())
     }
     
@@ -551,7 +551,7 @@ where
     /// 若块为空且有前一个非空块，返回该块 <br>
     /// 若块为空且没有前一个非空块，返回None <br>
     /// 提供的索引大于最后一个块，相当于最后一个块 <br>
-    pub fn get_prev_index(&self, idx: usize) -> Option<usize> {
+    pub(crate) fn get_prev_index(&self, idx: usize) -> Option<usize> {
         if idx < self.items.len() {
             self.items[idx].thing_prev()
         } else {
@@ -566,7 +566,7 @@ where
     /// 若块为空且有后一个非空块，返回该块 <br>
     /// 若块为空且没有后一个非空块，返回None <br>
     /// 提供的索引大于最后一个块，返回None <br>
-    pub fn get_next_index(&self,idx: usize) -> Option<usize> {
+    pub(crate) fn get_next_index(&self,idx: usize) -> Option<usize> {
         if idx < self.items.len() {
             self.items[idx].thing_next()
         } else { None }
@@ -583,23 +583,23 @@ where
     
     
     /// 找到第一个非空块的(键,块引用)，即第一个元素
-    pub fn first_field(&self) -> Option<(usize,&FieldIn<V>)> {
+    pub(crate) fn first_field(&self) -> Option<(usize,&FieldIn<V>)> {
         Some(self.items[self.first_index()?].as_thing())
     }
     
     /// 找到最后一个非空块的(键,块引用)，即最后一个元素
-    pub fn last_field(&self) -> Option<(usize,&FieldIn<V>)> {
+    pub(crate) fn last_field(&self) -> Option<(usize,&FieldIn<V>)> {
         Some(self.items[self.last_index()?].as_thing())
     }
     
     
     /// 找到第一个非空块的索引
-    pub fn first_index(&self) -> Option<usize> {
+    pub(crate) fn first_index(&self) -> Option<usize> {
         self.items.first()?.thing_prev()
     }
     
     /// 找到最后一个非空块的索引
-    pub fn last_index(&self) -> Option<usize> {
+    pub(crate) fn last_index(&self) -> Option<usize> {
         self.items.last()?.thing_prev()
     }
     
