@@ -636,7 +636,7 @@ where
     }
     
     
-    pub(crate) fn remove_rec(this: &mut Self, target: V, idx: usize) -> RemoveResult<()> {
+    fn remove_rec(this: &mut Self, target: V, idx: usize) -> RemoveResult<()> {
         use RemoveFieldSetError::*;
         let items = &mut this.items;
         if let RawField::Thing(ref mut t) = items[idx] {
