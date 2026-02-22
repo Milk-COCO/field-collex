@@ -316,6 +316,14 @@ pub enum InsertFieldSetError {
 }
 
 
+#[derive(Debug)]
+pub struct TryExtendResult<V> {
+    pub ok: Vec<V>,
+    pub out_of_span: Vec<V>,
+    pub already_exist: Vec<V>
+}
+
+
 /// 上层包装。每个块可以存多个内容（通过递归结构实现）
 /// 非空块可为单个元素或一个FieldSet，以[`Field`]类型存储。
 #[derive(Default, Debug)]
@@ -603,6 +611,65 @@ where
     {
         let start = *self.span.start() + self.unit * idx;
         start..start + self.unit
+    }
+    
+    /// 批量插入元素，忽略错误值。
+    pub fn extend(&mut self, mut vec: Vec<V>)
+    where
+        V: Mul<usize, Output = V>,
+        V: Div<usize, Output = V>,
+    {
+        vec.sort();
+        // 逐个插入
+        
+        for v in vec {
+            match self.insert(v) {
+                Err(err) => {
+                    match err {
+                        InsertFieldSetError::OutOfSpan => {
+                            break;
+                        }
+                        InsertFieldSetError::AlreadyExist => {}
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    
+    /// 批量插入元素，返回插入的情况。
+    pub fn try_extend(&mut self, mut vec: Vec<V>) -> TryExtendResult<V>
+    where
+        V: Mul<usize, Output = V>,
+        V: Div<usize, Output = V>,
+    {
+        vec.sort();
+        // 逐个检查并插入
+        
+        let mut ok = Vec::new();
+        let mut out_of_span = Vec::new();
+        let mut already_exist = Vec::new();
+        for (idx, v) in vec.into_iter().enumerate() {
+            match self.insert(v) {
+                Ok(_) => {
+                    ok.push(v)
+                }
+                Err(err) => {
+                    match err {
+                        InsertFieldSetError::OutOfSpan => {
+                            out_of_span.extend_from_slice(&vec[idx..]);
+                            break;
+                        }
+                        InsertFieldSetError::AlreadyExist => {
+                            already_exist.push(v)
+                        }
+                    }
+                }
+            }
+        }
+        TryExtendResult {
+            ok, out_of_span, already_exist
+        }
     }
     
     /// 插入值
