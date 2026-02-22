@@ -684,33 +684,36 @@ where
         if !span.contains(&value) { return Err(OutOfSpan) }
         
         let idx = self.idx_of(value);
-        // 目标索引越界 -> 根据当前最后一个元素计算前导，后导为Prev(idx) -> reserve expand push
+        // 目标索引越界 -> 根据当前最后一个非空块计算前导 -> reserve expand push
         // 目标索引不越界 -> 填充
         let items = &mut self.items;
         let len = items.len();
         // 未越界（这里同时杜绝了len==0的情况）
         if idx < len {
-            // 非第一且前一个非Thing
-            if idx != 0 && !matches!(items[idx-1], RawField::Thing(_)) {
-                // 计算前导填充物与填充端点
-                let (first_idx,prev) = match items[idx-1] {
-                    RawField::Prev(prev) | RawField::Among(prev, _) => (prev+1, RawField::Among(prev, idx)),
-                    RawField::Next(_) | RawField::Void => (0,RawField::Next(idx)),
-                    RawField::Thing(_) => unreachable!()
-                };
-                
-                items[first_idx..idx].fill(prev);
-            }
-            // 非最后且后一个非Thing
-            if idx != len - 1 && !matches!(items[idx+1], RawField::Thing(_)) {
-                // 计算前导填充物与填充端点
-                let (last_idx,next) =  match items[idx+1] {
-                    RawField::Next(next) | RawField::Among(_, next) => (next,RawField::Among(idx, next)),
-                    RawField::Prev(_) | RawField::Void => (len,RawField::Prev(idx)),
-                    RawField::Thing(_) => unreachable!()
-                };
-                
-                items[idx+1..last_idx].fill(next);
+            // 当前为Thing时，并不需要修改其他块，因为他们存储的索引正常指向当前位置，不需要修改
+            if !matches!(items[idx], RawField::Thing(_)) {
+                // 非第一且前一个非Thing
+                if idx != 0 && !matches!(items[idx-1], RawField::Thing(_)) {
+                    // 计算前导填充物与填充端点
+                    let (first_idx, prev) = match items[idx - 1] {
+                        RawField::Prev(prev) | RawField::Among(prev, _) => (prev + 1, RawField::Among(prev, idx)),
+                        RawField::Next(_) | RawField::Void => (0, RawField::Next(idx)),
+                        RawField::Thing(_) => unreachable!()
+                    };
+                    
+                    items[first_idx..idx].fill(prev);
+                }
+                // 非最后且后一个非Thing
+                if idx != len - 1 && !matches!(items[idx+1], RawField::Thing(_)) {
+                    // 计算前导填充物与填充端点
+                    let (last_idx, next) = match items[idx + 1] {
+                        RawField::Next(next) | RawField::Among(_, next) => (next, RawField::Among(idx, next)),
+                        RawField::Prev(_) | RawField::Void => (len, RawField::Prev(idx)),
+                        RawField::Thing(_) => unreachable!()
+                    };
+                    
+                    items[idx+1..last_idx].fill(next);
+                }
             }
             // 插入处
             let old = mem::replace(&mut items[idx], RawField::Void) ;
@@ -734,8 +737,7 @@ where
                                         2
                                     ){
                                         Ok(s) => s,
-                                        // TODO：更灵活的错误处理
-                                        // 因为不能直接unwrap(要V:Debug，显然不必要)所以显式匹配
+                                        // 逻辑上不会出错，因为不能直接.unwrap(要V:Debug，增加会增添麻烦)所以显式匹配
                                         Err(err) => {
                                             panic!("Called `Field::with_capacity` in `Field::insert` to make a new sub FieldSet, but get a error {err}");
                                         }
