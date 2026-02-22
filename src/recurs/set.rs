@@ -244,25 +244,6 @@ impl<V> WithCapacityFieldSetError<V>{
 }
 
 
-pub(crate) type FindMatcherResult<T> = Result<T, FindMatcherFieldSetError>;
-
-#[derive(Error, Debug)]
-pub(crate) enum FindMatcherFieldSetError {
-    #[error("无匹配的数据")]
-    CannotFind,
-    #[error("当前无数据可查询")]
-    Empty,
-}
-
-impl From<FindMatcherFieldSetError> for FindFieldSetError{
-    fn from(value: FindMatcherFieldSetError) -> Self {
-        match value {
-            FindMatcherFieldSetError::CannotFind => {Self::CannotFind}
-            FindMatcherFieldSetError::Empty => {Self::Empty}
-        }
-    }
-}
-
 pub(crate) type GetIndexResult<T> = Result<T, GetIndexFieldSetError>;
 
 #[derive(Error, Debug)]
@@ -297,7 +278,6 @@ macro_rules! impl_from_get_index_err {
 }
 
 impl_from_get_index_err!(FindFieldSetError);
-impl_from_get_index_err!(ReplaceFieldSetError, EmptyField);
 impl_from_get_index_err!(RemoveFieldSetError, CannotFind);
 
 
@@ -313,48 +293,6 @@ pub enum FindFieldSetError {
     Empty,
 }
 
-pub(crate) type ReplaceIndexResult<T> = Result<T, ReplaceIndexFieldSetError>;
-
-#[derive(Error, Debug)]
-pub enum ReplaceIndexFieldSetError {
-    #[error("指定的块为空块")]
-    EmptyField,
-    #[error("提供的值不属于此区间")]
-    OutOfField,
-}
-
-
-pub(crate) type RemoveIndexResult<T> = Result<T, RemoveIndexFieldSetError>;
-
-#[derive(Error, Debug)]
-pub enum RemoveIndexFieldSetError {
-    #[error("指定的块已为空块")]
-    EmptyField,
-}
-
-
-pub(crate) type ReplaceResult<T> = Result<T, ReplaceFieldSetError>;
-
-#[derive(Error, Debug)]
-pub enum ReplaceFieldSetError {
-    #[error("提供的值超出了当前FieldSet的span范围")]
-    OutOfSpan,
-    #[error("无匹配的数据")]
-    CannotFind,
-    #[error("指定的块为空块")]
-    EmptyField,
-    #[error("提供的值不属于此区间")]
-    OutOfField,
-}
-
-impl From<ReplaceIndexFieldSetError> for ReplaceFieldSetError {
-    fn from(value: ReplaceIndexFieldSetError) -> Self {
-        match value {
-            ReplaceIndexFieldSetError::EmptyField => {Self::EmptyField}
-            ReplaceIndexFieldSetError::OutOfField => {Self::OutOfField}
-        }
-    }
-}
 
 pub(crate) type RemoveResult<T> = Result<T, RemoveFieldSetError>;
 
@@ -368,29 +306,14 @@ pub enum RemoveFieldSetError {
     NotExist,
 }
 
-impl From<RemoveIndexFieldSetError> for RemoveFieldSetError {
-    fn from(value: RemoveIndexFieldSetError) -> Self {
-        match value {
-            RemoveIndexFieldSetError::EmptyField => {Self::NotExist }
-        }
-    }
-}
 
-
-pub(crate) type TryInsertResult = Result<(), TryInsertFieldSetError>;
-#[derive(Error, Debug)]
-pub enum TryInsertFieldSetError {
-    #[error("Key超出了当前FieldSet的span范围")]
-    OutOfSpan,
-    #[error("Key对应块已存在元素")]
-    AlreadyExists,
-}
-
-pub(crate) type InsertResult<V> = Result<Option<V>, InsertFieldSetError>;
+pub(crate) type InsertResult = Result<(), InsertFieldSetError>;
 #[derive(Error, Debug)]
 pub enum InsertFieldSetError {
-    #[error("Key超出了当前FieldSet的span范围")]
+    #[error("提供值超出了当前FieldSet的span范围")]
     OutOfSpan,
+    #[error("已存在此元素")]
+    AlreadyExist
 }
 
 
@@ -511,22 +434,50 @@ where
         ((target - *self.span.start()) / self.unit).into()
     }
     
-    pub(crate) fn resize_to_idx(&mut self, idx: usize) {
-        if self.items.len() <= idx {
-            let filler = match self.items.last() {
-                None =>
-                    RawField::Void,
-                Some(last) => {
-                    if let RawField::Thing(t) = last {
-                        RawField::prev_from(t)
-                    } else {
-                        // 上面确保不是thing
-                        last.clone()
-                    }
+    /// 将内部Vec大小扩大到 idx+1
+    ///
+    /// 自动填充后继元素
+    ///
+    /// 返回值意味着是否进行了大小修改： <br>
+    /// 当前大小已达标时，没有进行大小修改，返回false
+    pub(crate) fn expand_to_idx(&mut self, idx: usize) -> bool {
+        let filler = match self.items.last() {
+            None =>
+                RawField::Void,
+            Some(last) => {
+                if let RawField::Thing(t) = last {
+                    RawField::prev_from(t)
+                } else {
+                    // 上面确保不是thing
+                    last.clone()
                 }
-            };
-            self.items.resize(idx+1,filler);
-        }
+            }
+        };
+        self.expand_to(idx + 1, filler)
+    }
+    
+    /// 将内部Vec大小扩大到 new_size
+    ///
+    /// 返回值意味着是否进行了大小修改： <br>
+    /// 当前大小已达标时，没有进行大小修改，返回false
+    pub(crate) fn expand_to_with(&mut self, new_size: usize, maker: impl Fn() -> SetField<V>) -> bool {
+        if self.items.len() < new_size {
+            self.items.resize_with(new_size, maker);
+            true
+        } else { false }
+    }
+    
+    pub(crate) fn expand_to(&mut self, new_size: usize, filler: SetField<V>) -> bool {
+        if self.items.len() < new_size {
+            self.items.resize(new_size, filler);
+            true
+        } else { false }
+    }
+    
+    #[inline(always)]
+    #[must_use]
+    pub(crate) fn contains_idx(&self, idx: usize) -> bool {
+        self.items.len() <= idx
     }
     
     /// 查找对应值是否存在
@@ -635,6 +586,160 @@ where
         self.items.last()?.thing_prev()
     }
     
+    /// target是否可置入idx
+    pub(crate) fn is_in_index(&self, idx: usize, target: &V) -> bool
+    where
+        V: Mul<usize, Output = V>,
+    {
+        self.index_range(idx).contains(target)
+    }
+    
+    /// target是否可置入idx
+    pub(crate) fn index_range(&self, idx: usize) -> Range<V>
+    where
+        V: Mul<usize, Output = V>,
+    {
+        self.unit*idx..self.unit*(idx+1)
+    }
+    
+    /// 插入值
+    ///
+    pub fn insert(&mut self, value: V) -> InsertResult
+    where
+        V: Mul<usize, Output = V>,
+        V: Div<usize, Output = V>,
+    {
+        use InsertFieldSetError::*;
+        let span = self.span();
+        if !span.contains(&value) { return Err(OutOfSpan) }
+        
+        let idx = self.idx_of(value);
+        // 目标索引越界 -> 根据当前最后一个元素计算前导，后导为Prev(idx) -> reserve expand push
+        // 目标索引不越界 -> 填充
+        let items = &mut self.items;
+        let len = items.len();
+        // 未越界
+        if idx < len {
+            // 非第一
+            if idx != 0 {
+                // 计算前导填充物
+                let prev = match items[idx] {
+                    RawField::Next(prev) | RawField::Among(prev, _) => RawField::Among(prev, idx),
+                    RawField::Prev(_) | RawField::Void => RawField::Prev(idx),
+                    _ => unreachable!()
+                };
+                
+                // 得到填入范围
+                let mut last_idx = MaybeUninit::uninit();
+                for i in (0..idx).rev() {
+                    if matches!(items[i], RawField::Thing(_)) {
+                        last_idx.write(i+1);
+                        break
+                    }
+                }
+                
+                // SAFETY：for循环不可能运行0次因为idx>0
+                unsafe { items[last_idx.assume_init()..idx].fill(prev); }
+            }
+            // 非最后
+            if idx != len-1 {
+                // 计算后导填充物
+                let next = match items[idx] {
+                    RawField::Next(prev) | RawField::Among(prev, _) => RawField::Among(prev, idx),
+                    RawField::Prev(_) | RawField::Void => RawField::Prev(idx),
+                    _ => unreachable!()
+                };
+                
+                // 得到填入范围
+                let mut last_idx = MaybeUninit::uninit();
+                for i in (idx+1..len) {
+                    if matches!(items[i], RawField::Thing(_)) {
+                        last_idx.write(i-1);
+                        break
+                    }
+                }
+                
+                // SAFETY：for循环不可能运行0次因为idx<len-1(idx+1<len)
+                unsafe { items[idx+1..last_idx.assume_init()].fill(next); }
+            }
+            // 插入处
+            let old = mem::replace(&mut items[idx], RawField::Void) ;
+            let new = RawField::Thing((
+                idx,
+                match old {
+                    RawField::Thing(mut t) => {
+                        match t.1 {
+                            Field::Elem(e) => {
+                                if e == value {
+                                    return Err(AlreadyExist);
+                                }
+                                let mut set =
+                                    match FieldSet::with_capacity(
+                                        Span::Finite(self.unit*idx..self.unit*(idx+1)),
+                                        self.unit/64,
+                                        2
+                                    ){
+                                        Ok(s) => s,
+                                        // TODO：更灵活的错误处理
+                                        // 因为不能直接unwrap(要V:Debug，显然不必要)所以显式匹配
+                                        Err(err) => {
+                                            panic!("Called `Field::with_capacity` in `Field::insert` to make a new sub FieldSet, but get a error {err}");
+                                        }
+                                    }
+                                ;
+                                set.insert(e).unwrap();
+                                set.insert(value).unwrap();
+                                Field::Collex(set)
+                            }
+                            Field::Collex(ref mut set) => {
+                                set.insert(value)?;
+                                t.1
+                            }
+                        }
+                    }
+                    _ => {
+                        Field::Elem(value)
+                    }
+                }
+            ));
+            let _ = mem::replace(&mut items[idx], new);
+        } else { // 越界
+            // 修改未越界部分
+            let prev =
+                if len != 0{
+                    // 计算前导填充物
+                    let prev = match items[len - 1] {
+                        RawField::Next(prev) | RawField::Among(prev, _) => RawField::Among(prev, idx),
+                        RawField::Prev(_) | RawField::Void => RawField::Next(idx),
+                        _ => unreachable!()
+                    };
+                    
+                    // 得到填入范围
+                    let mut last_idx = MaybeUninit::uninit();
+                    for i in (0..len).rev() {
+                        if matches!(items[i], RawField::Thing(_)) {
+                            last_idx.write(i + 1);
+                            break
+                        }
+                    }
+                    
+                    // SAFETY：for循环不可能运行0次因为len>0
+                    unsafe { items[last_idx.assume_init()..len].fill(prev.clone()); }
+                    prev
+                } else {
+                    RawField::Next(idx)
+                }
+            ;
+            
+            // 补充越界部分
+            // reserve expand push
+            let new_size = idx + 1;
+            items.reserve(new_size-len);
+            items.resize(idx, prev);
+            items.push(RawField::Thing((idx, Field::Elem(value))));
+        }
+        Ok(())
+    }
     
     pub(crate) fn remove_rec(this: &mut Self, target: V, idx: usize) -> RemoveResult<()> {
         use RemoveFieldSetError::*;
