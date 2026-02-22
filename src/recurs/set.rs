@@ -226,8 +226,8 @@ pub(crate) type WithCapacityResult<T,V> = Result<T, WithCapacityFieldSetError<V>
 pub enum WithCapacityFieldSetError<V>{
     #[error("提供的 span 为空（大小为0）")]
     EmptySpan(Span<V>, V),
-    #[error("提供的 unit 为0")]
-    ZeroUnit(Span<V>, V),
+    #[error("提供的 unit <= 0")]
+    NonPositiveUnit(Span<V>, V),
     #[error("提供的 capacity 超过最大块数量")]
     OutOfSize(Span<V>, V),
 }
@@ -235,7 +235,7 @@ pub enum WithCapacityFieldSetError<V>{
 impl<V> WithCapacityFieldSetError<V>{
     pub fn unwrap(self) -> (Span<V>, V) {
         match self {
-            Self::ZeroUnit(span, unit)
+            Self::NonPositiveUnit(span, unit)
             | Self::EmptySpan(span, unit)
             | Self::OutOfSize(span, unit)
             => (span, unit)
@@ -439,8 +439,8 @@ where
     /// 若unit为0、span为空、capacity大于最大块数量，通过返回Err返还提供的数据
     pub fn with_capacity(span: Span<V>, unit: V, capacity: usize) -> WithCapacityResult<Self,V> {
         use WithCapacityFieldSetError::*;
-        if unit.is_zero() {
-            Err(ZeroUnit(span, unit))
+        if unit <= V::zero() {
+            Err(NonPositiveUnit(span, unit))
         } else if span.is_empty() {
             Err(EmptySpan(span, unit))
         } else if match span.size(){
