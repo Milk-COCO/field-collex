@@ -15,11 +15,11 @@ use crate::FieldItem;
 /// Void ：容器完全无任何元素 <br>
 ///
 #[derive(Debug)]
-pub enum RawField<V> {
-    Thing((usize, V)),
-    Prev (usize),
-    Among(usize, usize),
-    Next (usize),
+pub enum RawField<V, IDX = usize> {
+    Thing((IDX, V)),
+    Prev (IDX),
+    Among(IDX, IDX),
+    Next (IDX),
     Void,
 }
 
