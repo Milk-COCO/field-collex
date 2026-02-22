@@ -618,15 +618,15 @@ where
         // 目标索引不越界 -> 填充
         let items = &mut self.items;
         let len = items.len();
-        // 未越界
+        // 未越界（这里同时杜绝了len==0的情况）
         if idx < len {
-            // 非第一
-            if idx != 0 {
-                // 计算前导填充物
-                let prev = match items[idx] {
-                    RawField::Next(prev) | RawField::Among(prev, _) => RawField::Among(prev, idx),
-                    RawField::Prev(_) | RawField::Void => RawField::Prev(idx),
-                    _ => unreachable!()
+            // 非第一且前一个非Thing
+            if idx != 0 && !matches!(items[idx-1], RawField::Thing(_)) {
+                // 计算前导填充物与填充端点
+                let (first_idx,prev) = match items[idx-1] {
+                    RawField::Prev(prev) | RawField::Among(prev, _) => (prev+1, RawField::Among(prev, idx)),
+                    RawField::Next(_) | RawField::Void => (0,RawField::Next(idx)),
+                    RawField::Thing(_) => unreachable!()
                 };
                 
                 // 得到填入范围
@@ -648,19 +648,18 @@ where
                     RawField::Next(prev) | RawField::Among(prev, _) => RawField::Among(prev, idx),
                     RawField::Prev(_) | RawField::Void => RawField::Prev(idx),
                     _ => unreachable!()
+                items[first_idx..idx].fill(prev);
+            }
+            // 非最后且后一个非Thing
+            if idx != len - 1 && !matches!(items[idx+1], RawField::Thing(_)) {
+                // 计算前导填充物与填充端点
+                let (last_idx,next) =  match items[idx+1] {
+                    RawField::Next(next) | RawField::Among(_, next) => (next,RawField::Among(idx, next)),
+                    RawField::Prev(_) | RawField::Void => (len,RawField::Prev(idx)),
+                    RawField::Thing(_) => unreachable!()
                 };
                 
-                // 得到填入范围
-                let mut last_idx = MaybeUninit::uninit();
-                for i in (idx+1..len) {
-                    if matches!(items[i], RawField::Thing(_)) {
-                        last_idx.write(i-1);
-                        break
-                    }
-                }
-                
-                // SAFETY：for循环不可能运行0次因为idx<len-1(idx+1<len)
-                unsafe { items[idx+1..last_idx.assume_init()].fill(next); }
+                items[idx+1..last_idx].fill(next);
             }
             // 插入处
             let old = mem::replace(&mut items[idx], RawField::Void) ;
@@ -673,9 +672,10 @@ where
                                 if e == value {
                                     return Err(AlreadyExist);
                                 }
+                                let span = Span::Finite(self.unit*idx..self.unit*(idx+1));
                                 let mut set =
                                     match FieldSet::with_capacity(
-                                        Span::Finite(self.unit*idx..self.unit*(idx+1)),
+                                        span,
                                         self.unit/64,
                                         2
                                     ){
@@ -687,6 +687,7 @@ where
                                         }
                                     }
                                 ;
+                                // 此处不用传递，因为二者都必然插入成功：属于span且不相等
                                 set.insert(e).unwrap();
                                 set.insert(value).unwrap();
                                 Field::Collex(set)
@@ -703,29 +704,28 @@ where
                 }
             ));
             let _ = mem::replace(&mut items[idx], new);
+            
         } else { // 越界
             // 修改未越界部分
             let prev =
                 if len != 0{
-                    // 计算前导填充物
-                    let prev = match items[len - 1] {
-                        RawField::Next(prev) | RawField::Among(prev, _) => RawField::Among(prev, idx),
-                        RawField::Prev(_) | RawField::Void => RawField::Next(idx),
-                        _ => unreachable!()
-                    };
-                    
-                    // 得到填入范围
-                    let mut last_idx = MaybeUninit::uninit();
-                    for i in (0..len).rev() {
-                        if matches!(items[i], RawField::Thing(_)) {
-                            last_idx.write(i + 1);
-                            break
+                    match &items[len - 1]{
+                        RawField::Thing(t) => {
+                            debug_assert_eq!(t.0, len-1);
+                            RawField::Among(t.0,idx)
+                        }
+                        _ => {
+                            // 计算前导填充物与填充端点
+                            let (first_idx,prev) = match items[len - 1] {
+                                RawField::Prev(prev) | RawField::Among(prev, _) => (prev+1, RawField::Among(prev, idx)),
+                                RawField::Void => (0,RawField::Next(idx)),
+                                RawField::Next(_) | RawField::Thing(_) => unreachable!()
+                            };
+                            
+                            items[first_idx..len].fill(prev.clone());
+                            prev
                         }
                     }
-                    
-                    // SAFETY：for循环不可能运行0次因为len>0
-                    unsafe { items[last_idx.assume_init()..len].fill(prev.clone()); }
-                    prev
                 } else {
                     RawField::Next(idx)
                 }
@@ -733,8 +733,8 @@ where
             
             // 补充越界部分
             // reserve expand push
-            let new_size = idx + 1;
-            items.reserve(new_size-len);
+            let need_cap  = idx + 1 - len;
+            items.reserve(need_cap);
             items.resize(idx, prev);
             items.push(RawField::Thing((idx, Field::Elem(value))));
         }
