@@ -170,7 +170,7 @@ pub struct TryExtendResult<V> {
 #[derive(Debug)]
 pub struct FieldSet<V>
 where
-    V: Ord + Real + Into<usize>,
+    V: FieldValue,
 {
     pub(crate) span: Span<V>,
     pub(crate) unit: V,
@@ -189,7 +189,7 @@ macro_rules! index_of (
 
 impl<V> FieldSet<V>
 where
-    V: Ord + Real + Into<usize>,
+    V: FieldValue,
 {
     const SUB_FACTOR: usize = 64;
     /// 提供span与unit，构建一个FieldSet

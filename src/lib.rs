@@ -1,4 +1,4 @@
-use num_traits::real::Real;
+use num_traits::{NumOps, Zero};
 
 pub mod collex;
 pub mod set;
@@ -6,6 +6,10 @@ pub mod set;
 pub use set::FieldSet;
 pub use collex::FieldCollex;
 pub use collex::Collexetable;
+
+pub trait FieldValue: Ord + Copy + Into<usize> + NumOps + Zero {
+    fn ceil(&self) -> Self;
+}
 
 pub(crate) trait FieldItem<V> {
     fn first(&self) -> &V;
@@ -183,7 +187,7 @@ pub enum Field<V,C>{
 impl<E,V> FieldItem<E> for Field<E,FieldCollex<E,V>>
 where
     E: Collexetable<V>,
-    V: Ord + Real + Into<usize>,
+    V: FieldValue,
 {
     fn first(&self) -> &E {
         match self{
@@ -210,7 +214,7 @@ where
 
 impl<V> FieldItem<V> for Field<V,FieldSet<V>>
 where
-    V: Ord + Real + Into<usize>,
+    V: FieldValue,
 {
     fn first(&self) -> &V {
         match self{

@@ -1,5 +1,4 @@
 use span_core::Span;
-use num_traits::real::Real;
 use std::mem;
 use std::ops::{Div, Mul, Range};
 use std::vec::Vec;
@@ -206,7 +205,7 @@ pub trait Collexetable<V> {
 pub struct FieldCollex<E,V>
 where
     E: Collexetable<V>,
-    V: Ord + Real + Into<usize>,
+    V: FieldValue,
 {
     pub(crate) span: Span<V>,
     pub(crate) unit: V,
@@ -225,7 +224,7 @@ macro_rules! index_of (
 impl<E,V> FieldCollex<E,V>
 where
     E: Collexetable<V>,
-    V: Ord + Real + Into<usize>,
+    V: FieldValue
 {
     const SUB_FACTOR: usize = 64;
     /// 提供span与unit，构建一个FieldCollex
@@ -1060,5 +1059,4 @@ where
         // is_empty 已检查len>0
         Ok(self.idx_of(target).min(self.len() - 1))
     }
-    
 }
