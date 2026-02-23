@@ -672,6 +672,116 @@ where
         }
     }
     
+    pub(crate) fn insert_in_ib(&mut self, idx: usize, value: V) -> (bool, InsertResult)
+    where
+        V: Mul<usize, Output = V>,
+        V: Div<usize, Output = V>,
+    {
+        use InsertFieldSetError::*;
+        let items = &mut self.items;
+        
+        let mut need_fill = false;
+        // 插入处
+        let new = RawField::Thing((
+            idx,
+            match &items[idx] {
+                RawField::Thing(t) => {
+                    match &t.1 {
+                        Field::Elem(e) => {
+                            if *e == value {
+                                return (false,Err(AlreadyExist));
+                            }
+                            let span = Span::Finite({
+                                let start = *self.span.start() + self.unit * idx;
+                                start..start + self.unit
+                            });
+                            let mut set =
+                                match FieldSet::with_capacity(
+                                    span,
+                                    self.unit/64,
+                                    2
+                                ){
+                                    Ok(s) => s,
+                                    // 逻辑上不会出错，因为不能直接.unwrap(要V:Debug，增加会增添麻烦)所以显式匹配
+                                    Err(err) => {
+                                        panic!("Called `Field::with_capacity` in `Field::insert` to make a new sub FieldSet, but get a error {err}");
+                                    }
+                                }
+                                ;
+                            // 此处不用传递，因为二者都必然插入成功：属于span且不相等
+                            set.insert(*e).unwrap();
+                            set.insert(value).unwrap();
+                            Field::Collex(set)
+                        }
+                        Field::Collex(_) => {
+                            let old = mem::replace(&mut items[idx], RawField::Void);
+                            match old {
+                                RawField::Thing((_,mut t)) => {
+                                    match t {
+                                        Field::Collex(ref mut set) => {
+                                            let ans = set.insert(value);
+                                            match &ans {
+                                                Ok(_) => {}
+                                                Err(_) => {return (false,ans)}
+                                            }
+                                            t
+                                        }
+                                        _ => unreachable!()
+                                    }
+                                }
+                                _ => unreachable!()
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    need_fill = true;
+                    Field::Elem(value)
+                }
+            }
+        ));
+        let _ = mem::replace(&mut items[idx], new);
+        (need_fill,Ok(()))
+    }
+    
+    pub(crate) fn insert_in_ob(&mut self, idx: usize, value: V) -> InsertResult {
+        let items = &mut self.items;
+        let len = items.len();
+        
+        // 修改未越界部分
+        let prev =
+            if len != 0{
+                match &items[len - 1]{
+                    RawField::Thing(t) => {
+                        debug_assert_eq!(t.0, len-1);
+                        RawField::Among(t.0,idx)
+                    }
+                    _ => {
+                        // 计算前导填充物与填充端点
+                        let (first_idx,prev) = match items[len - 1] {
+                            RawField::Prev(prev) | RawField::Among(prev, _) => (prev+1, RawField::Among(prev, idx)),
+                            RawField::Void => (0,RawField::Next(idx)),
+                            RawField::Next(_) | RawField::Thing(_) => unreachable!()
+                        };
+                        
+                        items[first_idx..len].fill(prev.clone());
+                        prev
+                    }
+                }
+            } else {
+                RawField::Next(idx)
+            }
+            ;
+        
+        // 补充越界部分
+        // reserve expand push
+        let need_cap  = idx + 1 - len;
+        items.reserve(need_cap);
+        items.resize(idx, prev);
+        items.push(RawField::Thing((idx, Field::Elem(value))));
+        Ok(())
+    }
+    
     /// 插入值
     ///
     pub fn insert(&mut self, value: V) -> InsertResult
@@ -686,12 +796,13 @@ where
         let idx = self.idx_of(value);
         // 目标索引越界 -> 根据当前最后一个非空块计算前导 -> reserve expand push
         // 目标索引不越界 -> 填充
-        let items = &mut self.items;
-        let len = items.len();
+        let len = self.len();
         // 未越界（这里同时杜绝了len==0的情况）
         if idx < len {
-            // 当前为Thing时，并不需要修改其他块，因为他们存储的索引正常指向当前位置，不需要修改
-            if !matches!(items[idx], RawField::Thing(_)) {
+            let (need_fill,ans) = self.insert_in_ib(idx, value);
+            if need_fill {
+                let items = &mut self.items;
+                // 当前为Thing时，并不需要修改其他块，因为他们存储的索引正常指向当前位置，不需要修改
                 // 非第一且前一个非Thing
                 if idx != 0 && !matches!(items[idx-1], RawField::Thing(_)) {
                     // 计算前导填充物与填充端点
@@ -715,86 +826,10 @@ where
                     items[idx+1..last_idx].fill(next);
                 }
             }
-            // 插入处
-            let old = mem::replace(&mut items[idx], RawField::Void) ;
-            let new = RawField::Thing((
-                idx,
-                match old {
-                    RawField::Thing(mut t) => {
-                        match t.1 {
-                            Field::Elem(e) => {
-                                if e == value {
-                                    return Err(AlreadyExist);
-                                }
-                                let span = Span::Finite({
-                                    let start = *self.span.start() + self.unit * idx;
-                                    start..start + self.unit
-                                });
-                                let mut set =
-                                    match FieldSet::with_capacity(
-                                        span,
-                                        self.unit/64,
-                                        2
-                                    ){
-                                        Ok(s) => s,
-                                        // 逻辑上不会出错，因为不能直接.unwrap(要V:Debug，增加会增添麻烦)所以显式匹配
-                                        Err(err) => {
-                                            panic!("Called `Field::with_capacity` in `Field::insert` to make a new sub FieldSet, but get a error {err}");
-                                        }
-                                    }
-                                ;
-                                // 此处不用传递，因为二者都必然插入成功：属于span且不相等
-                                set.insert(e).unwrap();
-                                set.insert(value).unwrap();
-                                Field::Collex(set)
-                            }
-                            Field::Collex(ref mut set) => {
-                                set.insert(value)?;
-                                t.1
-                            }
-                        }
-                    }
-                    _ => {
-                        Field::Elem(value)
-                    }
-                }
-            ));
-            let _ = mem::replace(&mut items[idx], new);
-            
+            ans
         } else { // 越界
-            // 修改未越界部分
-            let prev =
-                if len != 0{
-                    match &items[len - 1]{
-                        RawField::Thing(t) => {
-                            debug_assert_eq!(t.0, len-1);
-                            RawField::Among(t.0,idx)
-                        }
-                        _ => {
-                            // 计算前导填充物与填充端点
-                            let (first_idx,prev) = match items[len - 1] {
-                                RawField::Prev(prev) | RawField::Among(prev, _) => (prev+1, RawField::Among(prev, idx)),
-                                RawField::Void => (0,RawField::Next(idx)),
-                                RawField::Next(_) | RawField::Thing(_) => unreachable!()
-                            };
-                            
-                            items[first_idx..len].fill(prev.clone());
-                            prev
-                        }
-                    }
-                } else {
-                    RawField::Next(idx)
-                }
-            ;
-            
-            // 补充越界部分
-            // reserve expand push
-            let need_cap  = idx + 1 - len;
-            items.reserve(need_cap);
-            items.resize(idx, prev);
-            items.push(RawField::Thing((idx, Field::Elem(value))));
+            self.insert_in_ob(idx, value)
         }
-        Ok(())
     }
     
     /// 返回是否置空当前块
