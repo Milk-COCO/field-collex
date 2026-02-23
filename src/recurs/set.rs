@@ -493,14 +493,13 @@ where
                                 start..start + new.unit
                             });
                             let mut set =
-                                match FieldSet::with_capacity(
+                                FieldSet::with_capacity(
                                     span,
                                     new.unit/Self::SUB_FACTOR,
                                     2
                                 ).unwrap_or_else(|err|
                                     panic!("Called `Field::with_capacity` in `Field::with_elements` to make a new sub FieldSet, but get a error {err}")
-                                )
-                                ;
+                                );
                             // 此处不用传递，因为二者都必然插入成功：属于span且不相等
                             // TODO：改掉这个insert
                             set.insert(*e).unwrap();
