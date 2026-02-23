@@ -649,10 +649,10 @@ where
         let mut ok = Vec::new();
         let mut out_of_span = Vec::new();
         let mut already_exist = Vec::new();
-        for (idx, v) in vec.into_iter().enumerate() {
-            match self.insert(v) {
+        for (idx, v) in vec.iter().enumerate() {
+            match self.insert(*v) {
                 Ok(_) => {
-                    ok.push(v)
+                    ok.push(*v)
                 }
                 Err(err) => {
                     match err {
@@ -661,7 +661,7 @@ where
                             break;
                         }
                         InsertFieldSetError::AlreadyExist => {
-                            already_exist.push(v)
+                            already_exist.push(*v)
                         }
                     }
                 }
