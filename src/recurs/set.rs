@@ -498,7 +498,7 @@ where
                                     new.unit/Self::SUB_FACTOR,
                                     2
                                 ).unwrap_or_else(|err|
-                                    panic!("Called `Field::with_capacity` in `Field::with_elements` to make a new sub FieldSet, but get an error {err}")
+                                    panic!("Called `FieldSet::with_capacity` in `FieldSet::with_elements` to make a new sub FieldSet, but get an error {err}")
                                 );
                             // 此处不用传递，因为二者都必然插入成功：属于span且不相等
                             // TODO：改掉这个insert
@@ -826,18 +826,13 @@ where
                                 start..start + self.unit
                             });
                             let mut set =
-                                match FieldSet::with_capacity(
+                                FieldSet::with_capacity(
                                     span,
                                     self.unit/Self::SUB_FACTOR,
                                     2
-                                ){
-                                    Ok(s) => s,
-                                    // 逻辑上不会出错，因为不能直接.unwrap(要V:Debug，增加会增添麻烦)所以显式匹配
-                                    Err(err) => {
-                                        panic!("Called `Field::with_capacity` in `Field::insert` to make a new sub FieldSet, but get a error {err}");
-                                    }
-                                }
-                                ;
+                                ).unwrap_or_else(|err|
+                                                 panic!("Called `FieldCollex::with_capacity` in `FieldCollex::insert_in_ib` to make a new sub FieldSet, but get a error {err}")
+                                );
                             // 此处不用传递，因为二者都必然插入成功：属于span且不相等
                             set.insert(*e).unwrap();
                             set.insert(value).unwrap();
