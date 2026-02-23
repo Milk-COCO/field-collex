@@ -31,6 +31,13 @@ impl<V> RawField<V> {
         }
     }
     
+    pub fn as_thing_mut(&mut self) -> (usize, &mut V) {
+        match self {
+            Self::Thing(t) => (t.0, &mut t.1),
+            _ => panic!("Called `RawField::as_thing()` on a not `Thing` value`"),
+        }
+    }
+    
     /// 得到Thing内部值
     /// 
     /// # Panics
