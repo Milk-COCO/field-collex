@@ -34,7 +34,7 @@ impl<V> RawField<V> {
     pub fn as_thing_mut(&mut self) -> (usize, &mut V) {
         match self {
             Self::Thing(t) => (t.0, &mut t.1),
-            _ => panic!("Called `RawField::as_thing()` on a not `Thing` value`"),
+            _ => panic!("Called `RawField::as_thing_mut()` on a not `Thing` value`"),
         }
     }
     
@@ -497,13 +497,9 @@ where
                                     span,
                                     new.unit/Self::SUB_FACTOR,
                                     2
-                                ){
-                                    Ok(s) => s,
-                                    // 逻辑上不会出错，因为不能直接.unwrap(要V:Debug，增加会增添麻烦)所以显式匹配
-                                    Err(err) => {
-                                        panic!("Called `Field::with_capacity` in `Field::insert` to make a new sub FieldSet, but get a error {err}");
-                                    }
-                                }
+                                ).unwrap_or_else(|err|
+                                    panic!("Called `Field::with_capacity` in `Field::with_elements` to make a new sub FieldSet, but get a error {err}")
+                                )
                                 ;
                             // 此处不用传递，因为二者都必然插入成功：属于span且不相等
                             // TODO：改掉这个insert
