@@ -212,13 +212,13 @@ pub enum NewFieldSetError<V>{
     #[error("提供的 span 为空（大小为0）")]
     EmptySpan(Span<V>, V),
     #[error("提供的 unit 为0")]
-    ZeroUnit(Span<V>, V),
+    NonPositiveUnit(Span<V>, V),
 }
 
 impl<V> NewFieldSetError<V>{
     pub fn unwrap(self) -> (Span<V>, V) {
         match self {
-            Self::ZeroUnit(span, unit)
+            Self::NonPositiveUnit(span, unit)
             | Self::EmptySpan(span, unit)
             => (span, unit)
         }
@@ -356,8 +356,8 @@ where
     pub fn new(span: Span<V>, unit: V) -> NewResult<Self,V> {
         use NewFieldSetError::*;
         
-        if unit.is_zero() {
-            Err(ZeroUnit(span, unit))
+        if unit <= V::zero() {
+            Err(NonPositiveUnit(span, unit))
         } else if span.is_empty() {
             Err(EmptySpan(span, unit))
         } else {
