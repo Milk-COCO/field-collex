@@ -362,7 +362,7 @@ pub struct TryExtendResult<V> {
 
 /// 每个块可以存多个内容（通过递归结构实现）
 /// 非空块可为单个元素或一个FieldSet，以[`Field`]类型存储。
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct FieldSet<V>
 where
     V: Ord + Real + Into<usize>,
