@@ -4,8 +4,6 @@ version = "0.0.1"
 edition = "2024"
 
 [dependencies]
-flag-cell = { git = "https://github.com/Milk-COCO/flag-cell.git" }
 span-core = { git = "https://github.com/Milk-COCO/span-core.git" }
 num-traits = "0.2.19"
 thiserror = "2.0.18"
-ahash = "0.8.12"
