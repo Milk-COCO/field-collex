@@ -238,6 +238,35 @@ pub enum WithCapacityFieldSetError<V>{
     OutOfSize(Span<V>, V),
 }
 
+impl<V> From<WithCapacityFieldSetError<V>> for WithElementsFieldSetError<V> {
+    fn from(value: WithCapacityFieldSetError<V>) -> Self {
+        match value {
+            WithCapacityFieldSetError::EmptySpan(s, u) => {Self::EmptySpan(s,u)}
+            WithCapacityFieldSetError::NonPositiveUnit(s, u) => {Self::NonPositiveUnit(s,u)}
+            WithCapacityFieldSetError::OutOfSize(..) => {unreachable!()}
+        }
+    }
+}
+
+impl<V> From<NewFieldSetError<V>> for WithElementsFieldSetError<V> {
+    fn from(value: NewFieldSetError<V>) -> Self {
+        match value {
+            NewFieldSetError::EmptySpan(s, u) => {Self::EmptySpan(s,u)}
+            NewFieldSetError::NonPositiveUnit(s, u) => {Self::NonPositiveUnit(s,u)}
+        }
+    }
+}
+
+pub(crate) type WithElementsResult<T,V> = Result<T, WithElementsFieldSetError<V>>;
+
+#[derive(Error, Debug)]
+pub enum WithElementsFieldSetError<V>{
+    #[error("提供的 span 为空（大小为0）")]
+    EmptySpan(Span<V>, V),
+    #[error("提供的 unit <= 0")]
+    NonPositiveUnit(Span<V>, V),
+}
+
 impl<V> WithCapacityFieldSetError<V>{
     pub fn unwrap(self) -> (Span<V>, V) {
         match self {
@@ -331,7 +360,7 @@ pub struct TryExtendResult<V> {
 }
 
 
-/// 上层包装。每个块可以存多个内容（通过递归结构实现）
+/// 每个块可以存多个内容（通过递归结构实现）
 /// 非空块可为单个元素或一个FieldSet，以[`Field`]类型存储。
 #[derive(Default, Debug)]
 pub struct FieldSet<V>
@@ -344,10 +373,20 @@ where
     
 }
 
+macro_rules! index_of (
+    ($target: expr) => {
+        Into::<usize>::into((($target - *self.span.start()) / self.unit))
+    };
+    ($this: expr, $target: expr) => {
+        Into::<usize>::into((($target - *$this.span.start()) / $this.unit))
+    }
+);
+
 impl<V> FieldSet<V>
 where
     V: Ord + Real + Into<usize>,
 {
+    const SUB_FACTOR: usize = 64;
     /// 提供span与unit，构建一个FieldSet
     ///
     /// span为Key的范围，unit为每个块的大小，同时也是每个块之间的间隔
@@ -396,6 +435,95 @@ where
                 items: Vec::with_capacity(capacity),
             })
         }
+    }
+    
+    /// 根据Vec快速构造FieldSet，忽略非法值
+    pub fn with_elements(span: Span<V>, unit: V, mut vec: Vec<V>) -> WithElementsResult<Self,V>
+    where
+        V: Mul<usize, Output = V>,
+        V: Div<usize, Output = V>,
+    {
+        vec.sort();
+        vec.dedup();
+        
+        let mut new = Self::new(span, unit)?;
+        // 第一个非法值的索引
+        let first_oob_idx = vec.iter().enumerate().rev().try_for_each(
+            |(idx,v)|
+            if new.span.contains(&v) {
+                Err(idx+1)
+            } else {
+                Ok(())
+            }
+        ).err().unwrap_or(0);
+        let vec = &vec[0..first_oob_idx];
+        if vec.len()==0 {
+            // do nothing
+        } else if vec.len()==1 {
+            let _ = new.insert(vec[0]);
+        } else {
+            let cap = new.idx_of(vec[first_oob_idx-1]);
+            // 预分配
+            let items = &mut new.items;
+            items.reserve(cap);
+            
+            // 提前插入第一个的内容
+            let mut last_idx = index_of!(new,vec[0]);
+            // 存在前置空块（自己为起点(==0)就是不存在）
+            if last_idx != 0 {
+                items.resize(last_idx ,RawField::Prev(last_idx));
+            }
+            items.push(RawField::Thing((last_idx,Field::Elem(vec[0]))));
+            
+            // 遍历插入。0在上面
+            let vec = &vec[1..];
+            for elem in vec.into_iter() {
+                // 与上一个完全相同的情况不存在，已经用了dedup。
+                
+                let this_idx = index_of!(new,*elem);
+                // 若此与上一个处于同一个区间，转为Set
+                if this_idx == last_idx {
+                    // 确保至少存在一个元素。见上
+                    match items.last_mut().unwrap()
+                        // 有序集合顺序push导致idx相同时最后一个必定是上一个插入的Thing
+                        .as_thing_mut().1{
+                        Field::Elem(e) => {
+                            let span = Span::Finite({
+                                let start = *new.span.start() + new.unit * this_idx;
+                                start..start + new.unit
+                            });
+                            let mut set =
+                                match FieldSet::with_capacity(
+                                    span,
+                                    new.unit/Self::SUB_FACTOR,
+                                    2
+                                ){
+                                    Ok(s) => s,
+                                    // 逻辑上不会出错，因为不能直接.unwrap(要V:Debug，增加会增添麻烦)所以显式匹配
+                                    Err(err) => {
+                                        panic!("Called `Field::with_capacity` in `Field::insert` to make a new sub FieldSet, but get a error {err}");
+                                    }
+                                }
+                                ;
+                            // 此处不用传递，因为二者都必然插入成功：属于span且不相等
+                            // TODO：改掉这个insert
+                            set.insert(*e).unwrap();
+                            set.insert(*elem).unwrap();
+                            items[this_idx] = RawField::Thing((this_idx ,Field::Collex(set)))
+                        }
+                        Field::Collex(set) => {
+                            // TODO：改掉这个insert
+                            set.insert(*elem).unwrap();
+                        }
+                    };
+                } else { // 与上一个处于不同区间，先填充Among再push自己
+                    items.resize(this_idx, RawField::Among(last_idx, this_idx));
+                    items.push(RawField::Thing((this_idx, Field::Elem(*elem))))
+                }
+                last_idx = this_idx;
+            }
+        }
+        Ok(new)
     }
     
     pub fn span(&self) -> &Span<V> {
@@ -705,7 +833,7 @@ where
                             let mut set =
                                 match FieldSet::with_capacity(
                                     span,
-                                    self.unit/64,
+                                    self.unit/Self::SUB_FACTOR,
                                     2
                                 ){
                                     Ok(s) => s,
