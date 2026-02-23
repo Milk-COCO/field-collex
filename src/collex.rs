@@ -333,10 +333,14 @@ where
                                 let start = *new.span.start() + new.unit * this_idx;
                                 start..start + new.unit
                             });
+                            let mut unit = new.unit/Self::SUB_FACTOR;
+                            if unit.is_zero() {
+                                unit = V::min_positive();
+                            }
                             let collex =
-                                 FieldCollex::with_capacity(
+                                FieldCollex::with_capacity(
                                     span,
-                                    new.unit/Self::SUB_FACTOR,
+                                    unit,
                                     2
                                 ).unwrap_or_else(|err|
                                     panic!("Called `FieldCollex::with_capacity` in `FieldCollex::with_elements` to make a new sub FieldSet, but get a error {err}")
@@ -697,13 +701,17 @@ where
                                 let start = *self.span.start() + self.unit * idx;
                                 start..start + self.unit
                             });
+                            let mut unit = self.unit/Self::SUB_FACTOR;
+                            if unit.is_zero() {
+                                unit = V::min_positive();
+                            }
                             let collex =
                                 FieldCollex::with_capacity(
                                     span,
-                                    self.unit/Self::SUB_FACTOR,
+                                    unit,
                                     2
                                 ).unwrap_or_else(|err|
-                                                 panic!("Called `FieldCollex::with_capacity` in `FieldCollex::insert_in_ib` to make a new sub FieldSet, but get a error {err}")
+                                    panic!("Called `FieldCollex::with_capacity` in `FieldCollex::insert_in_ib` to make a new sub FieldSet, but get a error {err}")
                                 );
                             let old =
                                 match mem::replace(&mut items[idx], RawField::Thing((idx ,Field::Collex(collex)))).unwrap() {

@@ -9,6 +9,7 @@ pub use collex::Collexetable;
 
 pub trait FieldValue: Ord + Copy + Into<usize> + NumOps + Zero {
     fn ceil(&self) -> Self;
+    fn min_positive() -> Self;
 }
 
 pub(crate) trait FieldItem<V> {
