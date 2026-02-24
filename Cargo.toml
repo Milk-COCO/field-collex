@@ -2,9 +2,12 @@
 name = "field-collex"
 version = "0.0.1"
 edition = "2024"
+license = "Apache-2.0"
+description = "Collections implemented on block-based idea . (Do not ask me why `Field` ;> )"
+repository = "https://github.com/Milk-COCO/field-collex"
 
 [dependencies]
 span-core = "^0.1"
 num-traits = "^0.2"
 thiserror = "^2.0"
-fraction = { version = "^0.15" , features = ["default"] }
+fraction = "^0.15"

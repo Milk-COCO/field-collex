@@ -201,6 +201,8 @@ pub trait Collexetable<V> {
 
 /// 每个块可以存多个内容（通过递归结构实现）
 /// 非空块可为单个元素或一个FieldCollex，以[`Field`]类型存储。
+///
+/// 实际存入E，计算时通过Collexetable<V>中的方法得到V，剩余与FieldSet完全一致
 #[derive(Debug)]
 pub struct FieldCollex<E,V>
 where
