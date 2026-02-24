@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use num_traits::{NumOps, Zero};
 
 pub mod collex;
@@ -7,10 +9,79 @@ pub use set::FieldSet;
 pub use collex::FieldCollex;
 pub use collex::Collexetable;
 
-pub trait FieldValue: Ord + Copy + Into<usize> + NumOps + Zero {
+macro_rules! index_of (
+    ($target: expr) => {
+        $target.sub(*self.span.start()).div(self.unit).into_usize()
+    };
+    ($this: expr, $target: expr) => {
+        $target.sub(*$this.span.start()).div($this.unit).into_usize()
+    }
+);
+
+pub(crate) use index_of;
+
+pub trait FieldValue: Ord + Copy + NumOps + Zero {
     fn ceil(&self) -> Self;
     fn min_positive() -> Self;
+    fn into_usize(self) -> usize;
 }
+
+macro_rules! impl_field_value_for_int {
+    ($int: ty) => {
+        impl FieldValue for $int {
+            fn ceil(&self) -> Self { *self }
+            fn min_positive() -> Self { 1 }
+            fn into_usize(self) -> usize {
+                self as usize
+            }
+        }
+    };
+}
+
+impl_field_value_for_int!(isize);
+impl_field_value_for_int!(usize);
+impl_field_value_for_int!(u8);
+impl_field_value_for_int!(u16);
+impl_field_value_for_int!(u32);
+impl_field_value_for_int!(u64);
+impl_field_value_for_int!(u128);
+impl_field_value_for_int!(i8);
+impl_field_value_for_int!(i16);
+impl_field_value_for_int!(i32);
+impl_field_value_for_int!(i64);
+impl_field_value_for_int!(i128);
+
+macro_rules! impl_field_value_for_ratio {
+    ($int: ty) => {
+impl FieldValue for fraction::Ratio<$int>{
+    fn ceil(&self) -> Self {
+        self.ceil()
+    }
+    
+    fn min_positive() -> Self {
+        Self::new(1,<$int>::MAX)
+    }
+    
+    fn into_usize(self) -> usize {
+        let (a,b) = self.into_raw();
+        (a/b).into_usize()
+    }
+}
+    };
+}
+
+impl_field_value_for_ratio!(isize);
+impl_field_value_for_ratio!(usize);
+impl_field_value_for_ratio!(u8);
+impl_field_value_for_ratio!(u16);
+impl_field_value_for_ratio!(u32);
+impl_field_value_for_ratio!(u64);
+impl_field_value_for_ratio!(u128);
+impl_field_value_for_ratio!(i8);
+impl_field_value_for_ratio!(i16);
+impl_field_value_for_ratio!(i32);
+impl_field_value_for_ratio!(i64);
+impl_field_value_for_ratio!(i128);
 
 pub(crate) trait FieldItem<V> {
     fn first(&self) -> &V;

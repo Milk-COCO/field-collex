@@ -4,6 +4,7 @@ version = "0.0.1"
 edition = "2024"
 
 [dependencies]
-span-core = "0.1.0"
-num-traits = "0.2.19"
-thiserror = "2.0.18"
+span-core = "^0.1"
+num-traits = "^0.2"
+thiserror = "^2.0"
+fraction = { version = "^0.15" , features = ["default"] }

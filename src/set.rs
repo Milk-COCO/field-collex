@@ -1,5 +1,4 @@
 use span_core::Span;
-use num_traits::real::Real;
 use std::mem;
 use std::ops::{Div, Mul, Range};
 use std::vec::Vec;
@@ -178,15 +177,6 @@ where
     
 }
 
-macro_rules! index_of (
-    ($target: expr) => {
-        Into::<usize>::into((($target - *self.span.start()) / self.unit))
-    };
-    ($this: expr, $target: expr) => {
-        Into::<usize>::into((($target - *$this.span.start()) / $this.unit))
-    }
-);
-
 impl<V> FieldSet<V>
 where
     V: FieldValue,
@@ -226,7 +216,7 @@ where
             Err(EmptySpan(span, unit))
         } else if match span.size(){
             Ok(Some(size)) => {
-                capacity > (size / unit).ceil().into()
+                capacity > (size / unit).ceil().into_usize()
             },
             Ok(None) => {false}
             // is_empty为真时，永远不可能出现Err，因为它绝对有长度
@@ -344,7 +334,7 @@ where
     pub fn size(&self) -> Option<usize> {
         // 确保在创建时就不可能为空区间。详见那些构造函数
         match self.span.size(){
-            Ok(Some(size)) => Some((size / self.unit).ceil().into()),
+            Ok(Some(size)) => Some((size / self.unit).ceil().into_usize()),
             _ => None
         }
     }
@@ -377,7 +367,7 @@ where
     /// 包含前置检查的版本是[`get_index`]
     #[inline(always)]
     pub fn idx_of(&self, target: V) -> usize {
-        ((target - *self.span.start()) / self.unit).into()
+        ((target - *self.span.start()) / self.unit).into_usize()
     }
     
     /// 将内部Vec大小扩大到 idx+1
