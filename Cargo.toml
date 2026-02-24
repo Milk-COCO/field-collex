@@ -4,6 +4,6 @@ version = "0.0.1"
 edition = "2024"
 
 [dependencies]
-span-core = { git = "https://github.com/Milk-COCO/span-core.git" }
+span-core = "0.1.0"
 num-traits = "0.2.19"
 thiserror = "2.0.18"
