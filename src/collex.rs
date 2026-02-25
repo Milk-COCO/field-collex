@@ -116,7 +116,7 @@ macro_rules! impl_from_get_index_err {
 }
 
 impl_from_get_index_err!(FindFieldCollexError);
-impl_from_get_index_err!(RemoveFieldCollexError, CannotFind);
+impl_from_get_index_err!(RemoveFieldCollexError, NotExist);
 
 
 pub(crate) type FindResult<T> = Result<T, FindFieldCollexError>;
@@ -139,8 +139,6 @@ pub enum RemoveFieldCollexError {
     #[error("目标值超出了当前FieldCollex的span范围")]
     OutOfSpan,
     #[error("无匹配的数据")]
-    CannotFind,
-    #[error("指定的块已为空块")]
     NotExist,
 }
 
