@@ -271,11 +271,7 @@ where
     }
     
     /// 根据Vec快速构造FieldCollex，忽略非法值
-    pub fn with_elements(span: Span<V>, unit: V, mut other: Vec<E>) -> WithElementsResult<Self,V>
-    where
-        V: Mul<usize, Output = V>,
-        V: Div<usize, Output = V>,
-    {
+    pub fn with_elements(span: Span<V>, unit: V, mut other: Vec<E>) -> WithElementsResult<Self,V> {
         other.sort_by(Collexetable::collex_cmp);
         other.dedup_by(Collexetable::collex_mut_eq);
         
@@ -323,10 +319,10 @@ where
                     {
                         Field::Elem(_) => {
                             let span = Span::Finite({
-                                let start = *new.span.start() + new.unit * this_idx;
+                                let start = *new.span.start() + new.unit * V::from_usize(this_idx);
                                 start..start + new.unit
                             });
-                            let mut unit = new.unit/Self::SUB_FACTOR;
+                            let mut unit = new.unit/V::from_usize(Self::SUB_FACTOR);
                             if unit.is_zero() {
                                 unit = V::min_positive();
                             }
@@ -615,11 +611,7 @@ where
     }
     
     /// 批量插入元素，忽略错误值。
-    pub fn extend(&mut self, mut vec: Vec<E>)
-    where
-        V: Mul<usize, Output = V>,
-        V: Div<usize, Output = V>,
-    {
+    pub fn extend(&mut self, mut vec: Vec<E>) {
         vec.sort_by(Collexetable::collex_cmp);
         // 逐个插入
         
@@ -639,11 +631,7 @@ where
     }
     
     /// 批量插入元素，返回插入的情况。
-    pub fn try_extend(&mut self, mut vec: Vec<E>) -> TryExtendResult<E>
-    where
-        V: Mul<usize, Output = V>,
-        V: Div<usize, Output = V>,
-    {
+    pub fn try_extend(&mut self, mut vec: Vec<E>) -> TryExtendResult<E> {
         vec.sort_by(Collexetable::collex_cmp);
         // 逐个检查并插入
         
@@ -673,11 +661,7 @@ where
         }
     }
     
-    pub(crate) fn insert_in_ib(&mut self, idx: usize, value: E) -> (bool, InsertResult<E>)
-    where
-        V: Mul<usize, Output = V>,
-        V: Div<usize, Output = V>,
-    {
+    pub(crate) fn insert_in_ib(&mut self, idx: usize, value: E) -> (bool, InsertResult<E>) {
         use InsertFieldCollexError::*;
         let items = &mut self.items;
         
@@ -691,10 +675,10 @@ where
                                 return (false,Err(AlreadyExist(value)));
                             }
                             let span = Span::Finite({
-                                let start = *self.span.start() + self.unit * idx;
+                                let start = *self.span.start() + self.unit * V::from_usize(idx);
                                 start..start + self.unit
                             });
-                            let mut unit = self.unit/Self::SUB_FACTOR;
+                            let mut unit = self.unit/V::from_usize(Self::SUB_FACTOR);
                             if unit.is_zero() {
                                 unit = V::min_positive();
                             }
@@ -800,11 +784,7 @@ where
     
     /// 插入值
     ///
-    pub fn insert(&mut self, value: E) -> InsertResult<E>
-    where
-        V: Mul<usize, Output = V>,
-        V: Div<usize, Output = V>,
-    {
+    pub fn insert(&mut self, value: E) -> InsertResult<E> {
         use InsertFieldCollexError::*;
         let span = self.span();
         if !span.contains(value.collexate_ref()) { return Err(OutOfSpan(value)) }
