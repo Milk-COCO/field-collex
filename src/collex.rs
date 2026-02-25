@@ -1054,8 +1054,6 @@ where
 mod tests {
     use super::*;
     use span_core::Span;
-    use std::ops::Range;
-    use std::cmp::Ordering;
     
     // ===================== 测试用元素类型（实现Collexetable<u32>） =====================
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
