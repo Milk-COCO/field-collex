@@ -349,31 +349,3 @@ where
     }
 }
 
-impl<V> FieldItem<V> for Field<V,FieldSet<V>>
-where
-    V: FieldValue,
-{
-    fn first(&self) -> &V {
-        match self{
-            Field::Elem(e) => {e}
-            Field::Collex(set) => {
-                // 递归结构是所有权关系，不可能导致死循环。
-                // 只有为空时才会None，而空时不会置为Thing
-                set.first_in().unwrap()
-            }
-        }
-    }
-    
-    fn last(&self) -> &V {
-        match self{
-            Field::Elem(e) => {e},
-            Field::Collex(set) => {
-                // 递归结构是所有权关系，不可能导致死循环。
-                // 只有为空时才会None，而空时不会置为Thing
-                set.last_in().unwrap()
-            }
-        }
-    }
-    
-}
-
