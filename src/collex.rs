@@ -289,7 +289,7 @@ where
         } else if vec.len()==1 {
             let _ = new.insert(other.into_iter().next().unwrap());
         } else {
-            let cap = new.idx_of(vec[first_oob_idx-1].collexate_ref());
+            let cap = new.idx_of(vec[first_oob_idx-1].collexate_ref()) + 1;
             // 预分配
             let items = &mut new.items;
             items.reserve(cap);
@@ -300,6 +300,7 @@ where
             if last_idx != 0 {
                 items.resize(last_idx ,RawField::Prev(last_idx));
             }
+            let _ = other.split_off(first_oob_idx);
             let mut vec = other.into_iter();
             items.push(RawField::Thing((last_idx,Field::Elem(vec.next().unwrap()))));
             
