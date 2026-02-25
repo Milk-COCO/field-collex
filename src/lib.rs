@@ -256,6 +256,63 @@ pub enum Field<V,C>{
     Collex(C)
 }
 
+impl<V,C> Field<V,C> {
+    /// 取得作为Elem时的内部值
+    ///
+    /// # Panic
+    /// 非Elem时panic
+    pub fn into_elem(self) -> V {
+        match self{
+            Self::Elem(e) => e,
+            Self::Collex(_) => panic!("Called `Field::into_elem` on a not `Elem` value")
+        }
+    }
+    
+    /// 取得作为Elem时的内部值引用
+    ///
+    /// # Panic
+    /// 非Elem时panic
+    pub fn as_elem(&self) -> &V {
+        match self{
+            Self::Elem(e) => e,
+            Self::Collex(_) => panic!("Called `Field::as_elem` on a not `Elem` value")
+        }
+    }
+    
+    /// 取得作为Collex时的内部值
+    ///
+    /// # Panic
+    /// 非Collex时panic
+    pub fn into_collex(self) -> C {
+        match self{
+            Self::Collex(c) => c,
+            Self::Elem(_) => panic!("Called `Field::into_elem` on a not `Collex` value")
+        }
+    }
+    
+    /// 取得作为Collex时的内部值引用
+    ///
+    /// # Panic
+    /// 非Collex时panic
+    pub fn as_collex(&self) -> &C {
+        match self{
+            Self::Collex(c) => c,
+            Self::Elem(_) => panic!("Called `Field::as_elem` on a not `Collex` value")
+        }
+    }
+    
+    /// 取得作为Collex时的内部值可变引用
+    ///
+    /// # Panic
+    /// 非Collex时panic
+    pub fn as_collex_mut(&mut self) -> &mut C {
+        match self{
+            Self::Collex(c) => c,
+            Self::Elem(_) => panic!("Called `Field::as_elem` on a not `Collex` value")
+        }
+    }
+}
+
 impl<E,V> FieldItem<E> for Field<E,FieldCollex<E,V>>
 where
     E: Collexetable<V>,
