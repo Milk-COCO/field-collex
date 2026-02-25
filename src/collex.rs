@@ -848,7 +848,7 @@ where
         }
     }
     
-    /// 返回是否置空当前块
+    /// 返回(是否置空当前块，删除的块)
     pub(crate) fn remove_in(this: &mut Self, idx: usize ) -> (bool, RemoveResult<CollexField<E,V>>) {
         // 删除的逻辑
         let len = this.items.len();
@@ -913,6 +913,7 @@ where
         (false, Ok(old))
     }
     
+    /// (需要清空，Result(值))
     pub(crate) fn remove_rec(this: &mut Self, target: V, idx: usize) -> (bool, RemoveResult<E>) {
         use RemoveFieldCollexError::*;
         let items = &mut this.items;
@@ -947,7 +948,11 @@ where
     pub fn remove(&mut self, target: V) -> RemoveResult<E> {
         let idx = self.get_index(&target)
             .map_err(Into::<RemoveFieldCollexError>::into)?;
-        Self::remove_rec(self,target,idx).1
+        let ans = Self::remove_rec(self,target,idx);
+        if ans.0 {
+            self.items.clear()
+        }
+        ans.1
     }
     
     pub fn find_gt(&self, target: V) -> FindResult<&E> {
