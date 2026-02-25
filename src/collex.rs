@@ -416,7 +416,7 @@ where
     /// 此无任何前置检查，只会机械地返回目标相对于初始位置（区间的左端点）可能处于第几个块，但不确保这个块是否合法。<br>
     /// 包含前置检查的版本是[`get_index`]
     #[inline(always)]
-    pub fn idx_of(&self, target: &V) -> usize {
+    pub(crate) fn idx_of(&self, target: &V) -> usize {
         target.sub(*self.span.start()).div(self.unit).into_usize()
     }
     
