@@ -1,6 +1,6 @@
 use span_core::Span;
 use std::mem;
-use std::ops::{Div, Mul, Range};
+use std::ops::Range;
 use std::vec::Vec;
 use thiserror::Error;
 use crate::*;
@@ -593,19 +593,13 @@ where
     }
     
     /// target是否可置入idx
-    pub(crate) fn is_in_index(&self, idx: usize, target: &V) -> bool
-    where
-        V: Mul<usize, Output = V>,
-    {
+    pub(crate) fn is_in_index(&self, idx: usize, target: &V) -> bool {
         self.index_range(idx).contains(target)
     }
     
     /// idx块的范围
-    pub(crate) fn index_range(&self, idx: usize) -> Range<V>
-    where
-        V: Mul<usize, Output = V>,
-    {
-        let start = *self.span.start() + self.unit * idx;
+    pub(crate) fn index_range(&self, idx: usize) -> Range<V> {
+        let start = *self.span.start() + self.unit * V::from_usize(idx);
         start..start + self.unit
     }
     
