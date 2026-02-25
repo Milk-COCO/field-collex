@@ -60,13 +60,10 @@
 //! ## 快速开始 / Let's Go
 //!
 //! ### 1. 引入依赖 / Import
-//! 在 `Cargo.toml` 中添加：
-//! ```toml
-//! [dependencies]
-//! field-collex = "0.1.0"
-//! span_core = "0.1.0"
-//! num-traits = "0.2"
-//! thiserror = "1.0"
+//! I don't want to say anymore.
+//! ```bash
+//! cargo add field-collex
+//!
 //! ```
 //!
 //! ### 2. 基础使用 / Example
