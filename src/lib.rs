@@ -24,6 +24,7 @@ pub trait FieldValue: Ord + Copy + NumOps + Zero {
     fn ceil(&self) -> Self;
     fn min_positive() -> Self;
     fn into_usize(self) -> usize;
+    fn from_usize(value: usize) -> Self;
 }
 
 macro_rules! impl_field_value_for_int {
@@ -33,6 +34,9 @@ macro_rules! impl_field_value_for_int {
             fn min_positive() -> Self { 1 }
             fn into_usize(self) -> usize {
                 self as usize
+            }
+            fn from_usize(value: usize) -> Self {
+                value as $int
             }
         }
     };
@@ -65,6 +69,10 @@ impl FieldValue for fraction::Ratio<$int>{
     fn into_usize(self) -> usize {
         let (a,b) = self.into_raw();
         (a/b).into_usize()
+    }
+    
+    fn from_usize(value: usize) -> Self {
+        Self::from_integer(value as $int)
     }
 }
     };
