@@ -849,7 +849,7 @@ where
     }
     
     /// 返回是否置空当前块
-    pub(crate) fn remove_in(this: &mut Self, idx: usize ) -> bool {
+    pub(crate) fn remove_in(this: &mut Self, idx: usize ) -> (bool, RemoveResult<CollexField<E,V>>) {
         // 删除的逻辑
         let len = this.items.len();
         // 根据上一个元素与下一个元素，生成填充元素
@@ -883,7 +883,7 @@ where
             match next {
                 None =>
                     match prev {
-                        None => return true,
+                        None => return (true, Ok(mem::replace(&mut this.items[idx], RawField::Void))),
                         Some(prev) => RawField::Prev(prev),
                     },
                 Some(next) =>
@@ -908,13 +908,12 @@ where
             });
         
         // 更新自己
-        let _old = mem::replace(&mut this.items[idx], filler);
-        // debug_assert!(matches!(old, RawField::Thing((i,FieldIn::Elem(v))) if v == target && i == idx));
+        let old = mem::replace(&mut this.items[idx], filler);
         
-        false
+        (false, Ok(old))
     }
     
-    pub(crate) fn remove_rec(this: &mut Self, target: V, idx: usize) -> (bool, RemoveResult<()>) {
+    pub(crate) fn remove_rec(this: &mut Self, target: V, idx: usize) -> (bool, RemoveResult<E>) {
         use RemoveFieldCollexError::*;
         let items = &mut this.items;
         (false,
@@ -924,7 +923,8 @@ where
                      if target.ne(e.collexate_ref()) {
                          Err(NotExist)
                      } else {
-                         return (Self::remove_in(this, idx),Ok(()))
+                         let ans = Self::remove_in(this, idx);
+                         return (ans.0, ans.1.map(|cf| cf.unwrap().into_elem()))
                      }
                  }
                  Field::Collex(collex) => {
@@ -933,7 +933,7 @@ where
                      let sub = Self::remove_rec(collex,target,collex.idx_of(&target));
                      // 错误时 sub.0 是 false，不用额外判断
                      return if sub.0 {
-                         (Self::remove_in(this, idx),Ok(()))
+                         (Self::remove_in(this, idx).0, sub.1)
                      } else {sub}
                  }
              }
@@ -944,7 +944,7 @@ where
     }
     
     /// 删除对应值
-    pub fn remove_value(&mut self, target: V) -> RemoveResult<()> {
+    pub fn remove(&mut self, target: V) -> RemoveResult<E> {
         let idx = self.get_index(&target)
             .map_err(Into::<RemoveFieldCollexError>::into)?;
         Self::remove_rec(self,target,idx).1
