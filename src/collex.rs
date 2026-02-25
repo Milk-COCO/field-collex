@@ -936,21 +936,25 @@ where
     }
     
     pub fn find_gt(&self, target: V) -> FindResult<&E> {
+        let last_idx = self.len() - 1;
         self.find_in(
             target,
             |idx| idx+1 ,
             |f| f.thing_or_next(),
-            |f,v| f.last().collexate_ref().gt(v)
+            |f,v| f.last().collexate_ref().gt(v),
+            move |idx| idx == last_idx,
         )
     }
     
     
     pub fn find_ge(&self, target: V) -> FindResult<&E> {
+        let last_idx = self.len() - 1;
         self.find_in(
             target,
             |idx| idx+1 ,
             |f| f.thing_or_next(),
-            |f,v| f.last().collexate_ref().ge(v)
+            |f,v| f.last().collexate_ref().ge(v),
+            move |idx| idx == last_idx,
         )
     }
     
@@ -959,7 +963,8 @@ where
             target,
             |idx| idx-1 ,
             |f| f.thing_or_prev(),
-            |f,v| f.first().collexate_ref().lt(v)
+            |f,v| f.first().collexate_ref().lt(v),
+            |idx| idx == 0,
         )
     }
     
@@ -969,7 +974,8 @@ where
             target,
             |idx| idx-1 ,
             |f| f.thing_or_prev(),
-            |f,v| f.first().collexate_ref().le(v)
+            |f,v| f.first().collexate_ref().le(v),
+            |idx| idx == 0,
         )
     }
     
@@ -980,7 +986,8 @@ where
         target: V,
         next: fn(usize) -> usize,
         getter: fn(&CollexField<E, V>) -> Option<Result<usize, usize>>,
-        cmp: fn(&FieldIn<E, V>, &V) -> bool
+        cmp: fn(&FieldIn<E, V>, &V) -> bool,
+        is_edge: impl Fn(usize) -> bool,
     ) -> FindResult<&E> {
         use FindFieldCollexError::*;
         
@@ -995,7 +1002,7 @@ where
                 if cmp(&self.items[idx].as_thing().1, &target) {
                     idx
                 } else {
-                    if self.is_edge(idx) {
+                    if is_edge(idx) {
                         return Err(CannotFind)
                     } else {
                         next(idx)
@@ -1015,7 +1022,8 @@ where
                     target,
                     next,
                     getter,
-                    cmp
+                    cmp,
+                    is_edge
                 )}
         }
     }
@@ -1025,10 +1033,6 @@ where
     /// 为空不意味着内存占用为0。
     pub fn is_empty(&self) -> bool {
         self.items.is_empty() || matches!(self.items[0], RawField::Void)
-    }
-    
-    pub(crate) fn is_edge(&self, idx: usize) -> bool {
-        idx == 0 || idx == self.len()-1
     }
     
     /// 计算指定值对应的块索引，但是带通用前置检查
@@ -1044,5 +1048,186 @@ where
         if !span.contains(&target) { return Err(OutOfSpan); }
         // is_empty 已检查len>0
         Ok(self.idx_of(target).min(self.len() - 1))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use span_core::Span;
+    use std::ops::Range;
+    use std::cmp::Ordering;
+    
+    // ===================== 测试用元素类型（实现Collexetable<u32>） =====================
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
+    struct TestElem(u32);
+    
+    impl Collexetable<u32> for TestElem {
+        fn collexate(&self) -> u32 {
+            self.0
+        }
+        
+        fn collexate_ref(&self) -> &u32 {
+            &self.0
+        }
+    }
+    
+    // ===================== Pub方法测试用例 =====================
+    #[test]
+    fn test_basic_construction() {
+        // 测试：new / with_capacity / span / unit / size / len / capacity / is_empty
+        let finite_span = Span::new_finite(0u32, 100u32);
+        let unit = 10u32;
+        
+        // 1. new方法（正常场景）
+        let collex = FieldCollex::<TestElem, u32>::new(finite_span.clone(), unit).unwrap();
+        assert_eq!(collex.span(), &finite_span);
+        assert_eq!(*collex.unit(), unit);
+        assert_eq!(collex.size(), Some(10)); // 100/10=10块
+        assert_eq!(collex.len(), 0);
+        assert_eq!(collex.capacity(), 0);
+        assert!(collex.is_empty());
+        
+        // 2. new方法（错误场景：unit=0）
+        let err_unit_zero = FieldCollex::<TestElem, u32>::new(finite_span.clone(), 0u32).unwrap_err();
+        assert!(matches!(err_unit_zero, NewFieldCollexError::NonPositiveUnit(_, 0)));
+        
+        // 3. new方法（错误场景：空span）
+        let empty_span = Span::new_finite(5u32, 3u32); // start >= end 为空
+        let err_empty_span = FieldCollex::<TestElem, u32>::new(empty_span, unit).unwrap_err();
+        assert!(matches!(err_empty_span, NewFieldCollexError::EmptySpan(_, _)));
+        
+        // 4. with_capacity方法（正常场景）
+        let collex_with_cap = FieldCollex::<TestElem, u32>::with_capacity(finite_span, unit, 5).unwrap();
+        assert_eq!(collex_with_cap.capacity(), 5);
+        assert!(collex_with_cap.is_empty());
+        
+        // 5. with_capacity方法（错误场景：capacity超限）
+        let err_cap_out = FieldCollex::<TestElem, u32>::with_capacity(Span::new_finite(0u32, 100u32), 10u32, 11).unwrap_err();
+        assert!(matches!(err_cap_out, WithCapacityFieldCollexError::OutOfSize(_, _)));
+    }
+    
+    #[test]
+    fn test_insert_contains() {
+        // 测试：insert / contains / contains_value / first / last
+        let span = Span::new_finite(0u32, 100u32);
+        let unit = 10u32;
+        let mut collex = FieldCollex::<TestElem, u32>::new(span, unit).unwrap();
+        
+        // 插入元素
+        let elem1 = TestElem(5);
+        let elem2 = TestElem(15);
+        assert!(collex.insert(elem1).is_ok());
+        assert!(collex.insert(elem2).is_ok());
+        
+        // 验证包含性
+        assert!(collex.contains(&elem1));
+        assert!(collex.contains_value(5u32));
+        assert!(collex.contains(&elem2));
+        assert!(!collex.contains(&TestElem(25)));
+        assert!(!collex.contains_value(25u32));
+        
+        // 验证首尾元素
+        assert_eq!(collex.first(), Some(&elem1));
+        assert_eq!(collex.last(), Some(&elem2));
+        
+        // 验证非空
+        assert!(!collex.is_empty());
+    }
+    
+    #[test]
+    fn test_remove() {
+        // 测试：remove
+        let span = Span::new_finite(0u32, 100u32);
+        let unit = 10u32;
+        let mut collex = FieldCollex::<TestElem, u32>::new(span, unit).unwrap();
+        
+        // 插入后删除
+        let elem = TestElem(5);
+        collex.insert(elem).unwrap();
+        let removed = collex.remove(5u32).unwrap();
+        assert_eq!(removed, elem);
+        
+        // 验证删除后不包含
+        assert!(!collex.contains(&elem));
+        assert!(!collex.contains_value(5u32));
+        assert!(collex.is_empty());
+        
+        // 错误场景：删除不存在的值
+        let err_remove = collex.remove(10u32).unwrap_err();
+        assert!(matches!(err_remove, RemoveFieldCollexError::NotExist));
+    }
+    
+    #[test]
+    fn test_extend_try_extend() {
+        // 测试：extend / try_extend
+        let span = Span::new_finite(0u32, 100u32);
+        let unit = 10u32;
+        let mut collex = FieldCollex::<TestElem, u32>::new(span, unit).unwrap();
+        
+        // 1. extend：批量插入
+        let elems = vec![TestElem(5), TestElem(15), TestElem(25)];
+        collex.extend(elems.clone());
+        assert!(collex.contains(&TestElem(5)));
+        assert!(collex.contains(&TestElem(15)));
+        
+        // 2. try_extend：批量插入并返回结果
+        let elems2 = vec![TestElem(25), TestElem(35), TestElem(105)]; // 105超出span范围
+        let result = collex.try_extend(elems2);
+        // 验证：105超出span，25已存在，35插入成功
+        assert!(!result.out_of_span.is_empty() && result.out_of_span[0].0 == 105);
+        assert!(!result.already_exist.is_empty() && result.already_exist[0].0 == 25);
+        assert!(collex.contains(&TestElem(35)));
+    }
+    
+    #[test]
+    fn test_find_methods() {
+        // 测试：find_gt / find_ge / find_lt / find_le
+        let span = Span::new_finite(0u32, 100u32);
+        let unit = 10u32;
+        let mut collex = FieldCollex::<TestElem, u32>::new(span, unit).unwrap();
+        
+        // 插入测试元素
+        let elems = [TestElem(5), TestElem(15), TestElem(25)];
+        for &e in &elems {
+            collex.insert(e).unwrap();
+        }
+        
+        // 测试find_gt（大于）
+        let gt = collex.find_gt(10u32).unwrap();
+        assert_eq!(*gt, TestElem(15));
+        
+        // 测试find_ge（大于等于）
+        let ge = collex.find_ge(15u32).unwrap();
+        assert_eq!(*ge, TestElem(15));
+        
+        // 测试find_lt（小于）
+        let lt = collex.find_lt(20u32).unwrap();
+        assert_eq!(*lt, TestElem(15));
+        
+        // 测试find_le（小于等于）
+        let le = collex.find_le(25u32).unwrap();
+        assert_eq!(*le, TestElem(25));
+        
+        // 错误场景：找不到匹配值
+        let err_find = collex.find_gt(30u32).unwrap_err();
+        assert!(matches!(err_find, FindFieldCollexError::CannotFind));
+    }
+    
+    #[test]
+    fn test_with_elements() {
+        // 测试：with_elements（批量构造）
+        let span = Span::new_finite(0u32, 100u32);
+        let unit = 10u32;
+        let elems = vec![TestElem(5), TestElem(15), TestElem(25), TestElem(105)]; // 105超出span
+        
+        // 构造FieldCollex
+        let collex = FieldCollex::<TestElem, u32>::with_elements(span, unit, elems).unwrap();
+        // 验证：105被忽略，5/15/25插入成功
+        assert!(collex.contains(&TestElem(5)));
+        assert!(collex.contains(&TestElem(15)));
+        assert!(!collex.contains(&TestElem(105)));
+        assert_eq!(collex.first(), Some(&TestElem(5)));
+        assert_eq!(collex.last(), Some(&TestElem(25)));
     }
 }
