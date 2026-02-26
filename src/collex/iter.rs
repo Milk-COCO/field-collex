@@ -1,5 +1,5 @@
-use crate::{Collexetable, Field, FieldCollex, FieldValue, RawField};
 use crate::collex::CollexField;
+use crate::{Collexetable, Field, FieldCollex, FieldValue, RawField};
 
 // ========== 无 dyn 动态分发的不可变迭代器 ==========
 /// 递归迭代栈的元素类型（静态类型，无动态分发）
@@ -24,12 +24,26 @@ where
     stack: Vec<IterStackItem<'a, E, V>>,
 }
 
+impl<'a, E, V> Iter<'a, E, V>
+where
+    E: Collexetable<V>,
+    V: FieldValue,
+{
+    /// 构造引用迭代器（内部调用）
+    pub(crate) fn new(collex: &'a FieldCollex<E, V>) -> Self {
+        Self {
+            stack: vec![IterStackItem::Outer(collex.items.iter())],
+        }
+    }
+}
+
+
 impl<E, V> FieldCollex<E, V>
 where
     E: Collexetable<V>,
     V: FieldValue,
 {
-    /// 获取不可变迭代器（纯静态类型，无动态分发）
+    /// 获取不可变迭代器
     pub fn iter(&self) -> Iter<'_, E, V> {
         Iter {
             stack: vec![IterStackItem::Outer(self.items.iter())],
@@ -93,7 +107,79 @@ where
     }
 }
 
-// ========== 安全的 IntoIterator 实现 ==========
+#[derive(Debug)]
+pub enum IntoIterStackItem<E, V>
+where
+    E: Collexetable<V>,
+    V: FieldValue,
+{
+    Outer(std::vec::IntoIter<CollexField<E, V>>),
+    Inner(IntoIter<E, V>),
+}
+
+#[derive(Debug)]
+pub struct IntoIter<E, V>
+where
+    E: Collexetable<V>,
+    V: FieldValue,
+{
+    stack: Vec<IntoIterStackItem<E, V>>,
+}
+
+impl<E, V> IntoIter<E, V>
+where
+    E: Collexetable<V>,
+    V: FieldValue,
+{
+    pub(crate) fn new(collex: FieldCollex<E, V>) -> Self {
+        let outer_iter = collex.items.into_iter();
+        Self {
+            stack: vec![IntoIterStackItem::Outer(outer_iter)],
+        }
+    }
+}
+
+impl<E, V> Iterator for IntoIter<E, V>
+where
+    E: Collexetable<V>,
+    V: FieldValue,
+{
+    type Item = E;
+    
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(mut iter_item) = self.stack.pop() {
+            match &mut iter_item {
+                IntoIterStackItem::Outer(outer_iter) => {
+                    while let Some(field) = outer_iter.next() {
+                        match field {
+                            RawField::Thing((_, field_in)) => match field_in {
+                                Field::Elem(e) => {
+                                    // 把剩余的迭代器放回栈（使用 by_ref 避免移动所有权）
+                                    self.stack.push(IntoIterStackItem::Outer(outer_iter.by_ref().clone()));
+                                    return Some(e);
+                                }
+                                Field::Collex(collex) => {
+                                    self.stack.push(IntoIterStackItem::Outer(outer_iter.by_ref().clone()));
+                                    self.stack.push(IntoIterStackItem::Inner(IntoIter::new(collex)));
+                                    break;
+                                }
+                            },
+                            RawField::Prev(_) | RawField::Among(_, _) | RawField::Next(_) | RawField::Void => continue,
+                        }
+                    }
+                }
+                IntoIterStackItem::Inner(inner_iter) => {
+                    if let Some(item) = inner_iter.next() {
+                        self.stack.push(iter_item);
+                        return Some(item);
+                    }
+                }
+            }
+        }
+        None
+    }
+}
+
 impl<'a, E, V> IntoIterator for &'a FieldCollex<E, V>
 where
     E: Collexetable<V>,
@@ -103,7 +189,20 @@ where
     type IntoIter = Iter<'a, E, V>;
     
     fn into_iter(self) -> Self::IntoIter {
-        self.iter()
+        Iter::new(self)
+    }
+}
+
+impl<E, V> IntoIterator for FieldCollex<E, V>
+where
+    E: Collexetable<V>,
+    V: FieldValue,
+{
+    type Item = E;
+    type IntoIter = IntoIter<E, V>;
+    
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter::new(self)
     }
 }
 
@@ -130,8 +229,7 @@ mod tests {
         }
     }
     #[test]
-    fn test_static_iter() {
-        // 测试纯静态迭代器（无 dyn）的遍历逻辑
+    fn test_iter() {
         let span = Span::new_finite(0u32, 100u32);
         let unit = 20u32;
         let elems = vec![TestElem(5), TestElem(15), TestElem(25), TestElem(55)];
