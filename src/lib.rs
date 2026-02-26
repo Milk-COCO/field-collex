@@ -38,14 +38,18 @@
 //!   Empty interval: A finite interval with 'start>=end' is considered empty and cannot be used to construct a collex.
 //!
 //! ### 2. 分块思想 / Block-based
-//! 以 `unit`（块大小）为粒度，将 `Span` 划分为多个块，每个块可存储：
-//! Using 'unit' (block size) as the granularity, divide 'Span' into multiple blocks, each of which can store:
+//! 以 `unit`（块大小）为粒度，将 `Span` 划分为多个间隔相同的块，每个块可存储：
+//! Using 'unit' (block size) as the granularity, divide 'Span' into multiple blocks with same size, each of which can store:
 //! - 单个数值（`Field::Elem`）
 //!   Single value (`Field: Elem`)
 //! - 子集合（`Field::Collex`）：块内多个数值时，递归创建子 `FieldCollex` 实现分层存储；
 //!   Subcollex (`Field: Collex`): When there are multiple values in a block, recursively create a sub FieldCollex to achieve hierarchical storage;
 //! - 空（详见 `RawField`）：若某个块为空，会存储前后一个非空块的索引。
 //!   Empty (see `RawField` for details): If a block is empty, the index of the preceding and following non-empty blocks will be stored.
+//!
+//! 这些设计使Collex可以通过任何值进行简单计算，O(1)地定位块的位置，从而快捷地进行查询与范围查询。
+//! These designs enable Collex to perform simple calculations using any value,
+//! locate the position of blocks as O(1), to quickly perform getters and range queries.
 //!
 //! ### 3. `FieldValue`
 //! 约束数值类型的核心 Trait，需实现以下能力：
@@ -59,130 +63,13 @@
 //!
 //! ## 快速开始 / Let's Go
 //!
-//! ### 1. 引入依赖 / Import
+//! ### 引入依赖 / Import
 //! I don't want to say anymore.
 //! ```bash
 //! cargo add field-collex
 //!
 //! ```
 //!
-//! ### 2. 基础使用 / Example
-//! ```rust
-//! use field_collex::FieldSet;
-//! use span_core::Span;
-//!
-//! // 1. 实现 FieldValue 。省略，u32 已实现。
-//!
-//! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     // 2. 定义区间和块大小
-//!     let span = Span::new_finite(0u32, 100u32); // 有限区间 [0, 100)
-//!     let unit = 10u32; // 每个块大小为 10
-//!
-//!     // 3. 构造 FieldSet
-//!     let mut set = FieldSet::<u32>::new(span, unit)?;
-//!
-//!     // 4. 插入数值
-//!     set.insert(5u32)?;
-//!     set.insert(15u32)?;
-//!
-//!     // 5. 查询数值
-//!     assert!(set.contains(5u32));
-//!     assert_eq!(set.find_gt(10u32)?, 15u32);
-//!
-//!     // 6. 批量插入
-//!     let result = set.try_extend(vec![25u32, 35u32, 105u32]);
-//!     assert_eq!(result.out_of_span, vec![105u32]); // 105 超出区间
-//!
-//!     // 7. 删除数值
-//!     let removed = set.remove(5u32)?;
-//!     assert_eq!(removed, 5u32);
-//!
-//!     Ok(())
-//! }
-//! ```
-//!
-//! ## 核心功能示例
-//!
-//! ### 1. 集合构造
-//! 支持三种构造方式：
-//! ```rust
-//! use field_collex::FieldSet;
-//! use span_core::Span;
-//!
-//! let span = Span::new_finite(0u32, 100u32);
-//! let unit = 10u32;
-//!
-//! // 空集合构造
-//! let set = FieldSet::<u32>::new(span.clone(), unit)?;
-//!
-//! // 预分配容量构造
-//! let set_with_cap = FieldSet::<u32>::with_capacity(span.clone(), unit, 5)?;
-//!
-//! // 批量元素构造（自动去重、过滤超出区间的值）
-//! let set_with_elems = FieldSet::<u32>::with_elements(span, unit, vec![5u32, 15u32, 105u32])?;
-//! ```
-//!
-//! ### 2. 数值查询
-//! 支持精准查询、范围查询：
-//! ```rust
-//! use field_collex::FieldSet;
-//! use span_core::Span;
-//!
-//! let mut set = FieldSet::<u32>::new(Span::new_finite(0u32, 100u32), 10u32)?;
-//! set.extend(vec![5u32, 15u32, 25u32]);
-//!
-//! // 精准包含判断
-//! assert!(set.contains(15u32));
-//!
-//! // 范围查询
-//! assert_eq!(set.find_ge(15u32)?, 15u32); // 大于等于
-//! assert_eq!(set.find_lt(20u32)?, 15u32); // 小于
-//! ```
-//!
-//! ### 3. 批量操作
-//! 支持批量插入（带结果反馈）、批量扩展：
-//! ```rust
-//! use field_collex::FieldSet;
-//! use span_core::Span;
-//!
-//! let mut set = FieldSet::<u32>::new(Span::new_finite(0u32, 100u32), 10u32)?;
-//!
-//! // 批量插入（忽略错误）
-//! set.extend(vec![5u32, 15u32, 25u32]);
-//!
-//! // 批量插入（返回超出区间/已存在的数值）
-//! let result = set.try_extend(vec![25u32, 35u32, 105u32]);
-//! assert_eq!(result.already_exist, vec![25u32]); // 已存在
-//! assert_eq!(result.out_of_span, vec![105u32]); // 超出区间
-//! ```
-//!
-//! ## 设计理念
-//!
-//! ### 1. 分层分块的性能优化
-//! - 小粒度数值集合：单个块存储单个数值（`Field::Elem`），减少递归开销；
-//! - 大粒度数值集合：块内递归创建子 `FieldCollex`（`Field::Collex`），避免全集合遍历；
-//! - 预分配容量：`with_capacity`/`extend` 提前分配内存，减少动态扩容的性能损耗。
-//!
-//! ### 2. 类型安全与错误处理
-//! - 泛型约束：`V` 必须实现 `FieldValue`，保证数值计算的合法性；
-//! - 精细化错误：每个操作的错误类型（如 `InsertFieldCollexError::OutOfSpan`/`AlreadyExist`）精准描述问题，便于业务侧处理；
-//! - 零开销包装：`SetElem<V>` 使用 `#[repr(transparent)]`，无额外内存开销，类型转换通过裸指针实现。
-//!
-//! ## 注意事项
-//!
-//! 1. **泛型约束**：
-//!    - `V` 必须实现 `FieldValue`，否则无法编译；
-//!    - 若使用自定义数值类型，需手动实现 `FieldValue` 的所有方法。
-//!
-//! 2. **区间约束**：
-//!    - 构造集合时，`unit` 不能为 0，`Span` 不能为空，否则返回对应错误；
-//!    - 插入的数值必须在 `Span` 范围内，否则返回 `OutOfSpan` 错误。
-//!
-//! 3. **内存管理**：
-//!    - 无限区间的 `Span` 会导致 `size()` 返回 `None`，集合可无限扩展，但需注意内存占用；
-//!    - `is_empty()` 判断的是「是否有有效数值」，而非「内存占用为 0」，空集合仍可能保留预分配的容量。
-//!
-
 
 #![allow(dead_code)]
 
