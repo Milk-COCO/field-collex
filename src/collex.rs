@@ -1,4 +1,5 @@
 pub mod iter;
+pub mod serde;
 
 use span_core::Span;
 use std::mem;

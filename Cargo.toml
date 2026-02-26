@@ -7,7 +7,8 @@ description = "Collections implemented on block-based idea . (Do not ask me why 
 repository = "https://github.com/Milk-COCO/field-collex"
 
 [dependencies]
-span-core = "^0.1"
+span-core = "^0.1.1"
 num-traits = "^0.2"
 thiserror = "^2.0"
 fraction = "^0.15"
+serde = { version = "^1.0", features = ["derive"] }
