@@ -992,7 +992,14 @@ where
         cmp: fn(&FieldIn<E, V>, &V) -> bool,
         is_edge: impl Fn(usize) -> bool,
     ) -> Option<&E> {
-        let t_idx = self.get_index(&target).ok()?;
+        let t_idx =
+            if self.span().start().ge(&target) {
+                0
+            } else if self.span().end().map(|v|v.le(&target)).unwrap_or(false) {
+                self.len()-1
+            } else {
+                self.get_index(&target).ok()?
+            };
         // 上面get_index内已经判空。
         // 结果落在t位 -> t位的最大值(大于)t -> t位已经足够，进入t位
         //           -> t位的最大值不(大于)t -> t+1位必然超过t位，进入下一位
@@ -1035,7 +1042,14 @@ where
         use RawField::*;
         use Field::*;
         
-        let t_idx = self.get_index(&target).ok()?;
+        let t_idx =
+            if self.span().start().ge(&target) {
+                0
+            } else if self.span().end().map(|v|v.le(&target)).unwrap_or(false) {
+                self.len()-1
+            } else {
+                self.get_index(&target).ok()?
+            };
         // 上面get_index内已经判空。
         // t位是thing -> t位属于t位 -> 是Collex则进入
         //                        -> 是Elem返回其
