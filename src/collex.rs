@@ -170,20 +170,20 @@ pub struct TryExtendResult<V> {
     pub already_exist: Vec<V>
 }
 
-pub(crate) type ModifyResult<R,E> = Result<R,ModifyFieldCollexError<R,E>>;
+pub(crate) type ModifyResult<R,T> = Result<R,ModifyFieldCollexError<T>>;
 #[derive(Error)]
 #[derive(Debug)]
-pub enum ModifyFieldCollexError<R,E> {
+pub enum ModifyFieldCollexError<T> {
     #[error("找不到对应元素")]
     CannotFind,
     #[error("刷新元素位置失败")]
-    InsertError(InsertFieldCollexError<(R,E)>),
+    InsertError(InsertFieldCollexError<T>),
 }
 
-impl<R,E> ModifyFieldCollexError<R,E> {
-    pub fn map<F,N>(self, f: F) -> ModifyFieldCollexError<R, N>
+impl<T> ModifyFieldCollexError<T> {
+    pub fn map<F,N>(self, f: F) -> ModifyFieldCollexError<N>
     where
-        F: FnOnce((R,E)) -> (R,N)
+        F: FnOnce(T) -> N
     {
         use ModifyFieldCollexError::*;
         match self {
@@ -1239,8 +1239,42 @@ where
     
     /// 闭包结束后，会根据Value是否发生变化来决定是否更新其在Collex中的位置
     ///
-    /// 若更新后的值无法容纳于本Collex，将直接通过错误类型的变体返还
-    pub fn modify<F,R>(&mut self, value: V, op: F) -> ModifyResult<R,E>
+    /// 若更新后的值(仅指collexate值)无法容纳于本Collex，将报错并重置值。
+    pub fn try_modify<F,R>(&mut self, value: V, op: F) -> ModifyResult<R,R>
+    where
+        F: Fn(&mut E) -> R
+    {
+        use ModifyFieldCollexError::*;
+        
+        let elem = self.get_mut(value).ok_or(CannotFind)?;
+        let old_v = elem.collexate();
+        let result = op(elem);
+        if old_v.eq(elem.collexate_ref()) {
+            Ok(result)
+        } else {
+            // TODO: 优化逻辑
+            let new_v = elem.collexate();
+            *elem.collexate_mut() = old_v;
+            let mut new_e = self.remove(old_v).unwrap();
+            *new_e.collexate_mut() = new_v;
+            match self.insert(new_e) {
+                Ok(()) => Ok(result),
+                Err(err) => Err(InsertError(err.map(|mut e| {
+                    *e.collexate_mut() = old_v;
+                    // 刚删除一模一样的东西，理应可以重新插入
+                    if let Err(_) = self.insert(e) {
+                        panic!("Called `FieldCollex::insert` in `FieldCollex::try_modify` but get an **unexpected** error");
+                    }
+                    result
+                }))),
+            }
+        }
+    }
+    
+    /// 闭包结束后，会根据Value是否发生变化来决定是否更新其在Collex中的位置
+    ///
+    /// 若更新后的值(仅指collexate值)无法容纳于本Collex，将直接通过错误类型的变体返还
+    pub fn modify<F,R>(&mut self, value: V, op: F) -> ModifyResult<R,(R,E)>
     where
         F: Fn(&mut E) -> R
     {
@@ -1269,7 +1303,7 @@ where
     /// # Panics
     /// 若无法找到对应的元素，panic
     ///
-    /// 若更新后的值无法容纳于本Collex，将直接Panic
+    /// 若更新后的值(仅指collexate值)无法容纳于本Collex，将直接Panic
     pub fn unchecked_modify<F,R>(&mut self, value: V, op: F) -> R
     where
         F: Fn(&mut E) -> R
@@ -1280,6 +1314,7 @@ where
         if old_v.eq(elem.collexate_ref()) {
             // do nothing
         } else {
+            // TODO: 优化逻辑
             let new_v = elem.collexate();
             *elem.collexate_mut() = old_v;
             let mut new_e = self.remove(old_v).unwrap();
@@ -1518,7 +1553,6 @@ mod tests {
         assert_eq!(collex.get(114514), None);
     }
     
-    
     #[test]
     fn test_modify() {
         // 测试：modify系列函数
@@ -1541,17 +1575,25 @@ mod tests {
         assert_eq!(collex.first(), Some(&TestElem(1)));
         
         // 修改Value，改变位置
-        let ans = collex.modify(1,|v| v.0=15 );
+        let _ans = collex.modify(1,|v| v.0=15 );
         assert_eq!(collex.first(), Some(&TestElem(15)));
         
         // 修改Value，移到别的后面
         collex.modify(15,|v| v.0=26 ).unwrap();
         assert_eq!(collex.first(), Some(&TestElem(25)));
         
-        
         // 改改别的吧
-        let ans = collex.modify(45,|v| v.0=0 );
+        let _ans = collex.modify(45,|v| v.0=0 );
         assert_eq!(collex.first(), Some(&TestElem(0)));
         
+        // modify会在值非法时弹出元素（当然是你修改后的）
+        let ans = collex.modify(0,|v| v.0=123 );
+        assert!(matches!(ans, Err(ModifyFieldCollexError::InsertError(InsertFieldCollexError::OutOfSpan(((),TestElem(123)))))));
+        assert_eq!(collex.first(), Some(&TestElem(25)));
+        
+        // try_modify会在值非法时还原值
+        let ans = collex.try_modify(25,|v| v.0=123 );
+        assert!(matches!(ans, Err(ModifyFieldCollexError::InsertError(InsertFieldCollexError::OutOfSpan(()) )) ));
+        assert_eq!(collex.first(), Some(&TestElem(25)));
     }
 }
