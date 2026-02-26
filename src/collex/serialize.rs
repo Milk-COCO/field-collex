@@ -24,9 +24,9 @@ where
     E: Collexetable<V>,
     V: FieldValue,
 {
-    span: Span<V>,
-    unit: V,
-    elements: Vec<E>,
+    pub span: Span<V>,
+    pub unit: V,
+    pub elements: Vec<E>,
 }
 
 impl<'de, E, V> Deserialize<'de> for FieldCollex<E, V>
