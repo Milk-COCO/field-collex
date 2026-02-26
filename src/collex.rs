@@ -978,7 +978,7 @@ where
         &self,
         target: V,
         next: fn(usize) -> usize,
-        getter: fn(&CollexField<E, V>) -> Option<Result<usize, usize>>,
+        thing_idx: fn(&CollexField<E, V>) -> Option<Result<usize, usize>>,
         cmp: fn(&FieldIn<E, V>, &V) -> bool,
         is_edge: impl Fn(usize) -> bool,
     ) -> FindResult<&E> {
@@ -990,7 +990,7 @@ where
         // 结果落在t位 -> t位的最大值(大于)t -> t位已经足够，进入t位
         //           -> t位的最大值不(大于)t -> t+1位必然超过t位，进入下一位
         // 结果落在非t位 -> 必然超过t位，进入此位
-        let f_idx = match getter(&self.items[t_idx]).ok_or(CannotFind)? {
+        let f_idx = match thing_idx(&self.items[t_idx]).ok_or(CannotFind)? {
             Ok(idx) => {
                 if cmp(&self.items[idx].as_thing().1, &target) {
                     idx
@@ -1014,7 +1014,7 @@ where
                 collex.find_in(
                     target,
                     next,
-                    getter,
+                    thing_idx,
                     cmp,
                     is_edge
                 )}
