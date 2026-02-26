@@ -478,8 +478,7 @@ where
     pub fn contains_value(&self, value: V) -> bool {
         let idx = self.idx_of(&value);
         if self.contains_idx(idx) {
-            match &self.items[idx]
-            {
+            match &self.items[idx] {
                 RawField::Thing((_, k)) =>
                     match k {
                         Field::Elem(e) => { value.eq(e.collexate_ref())}
@@ -1098,6 +1097,86 @@ where
         // is_empty 已检查len>0
         Ok(self.idx_of(target).min(self.len() - 1))
     }
+    
+    pub fn get(&self, value: V) -> Option<&E> {
+        let idx = self.idx_of(&value);
+        if self.contains_idx(idx) {
+            match &self.items[idx] {
+                RawField::Thing((_, k)) =>
+                    match k {
+                        Field::Elem(e) => {
+                            if value.eq(e.collexate_ref()) {
+                                Some(e)
+                            } else {
+                                None
+                            }
+                        }
+                        Field::Collex(collex) => { collex.get(value) }
+                    }
+                _ => None
+            }
+        } else { None }
+    }
+    
+    /// # Panics
+    /// 找不到panic
+    pub fn unchecked_get(&self, value: V) -> &E {
+        let idx = self.idx_of(&value);
+        match &self.items[idx] {
+            RawField::Thing((_, k)) =>
+                match k {
+                    Field::Elem(e) => {
+                        if value.eq(e.collexate_ref()) {
+                            e
+                        } else {
+                            panic!("Called `FieldCollex::unchecked_get_mut()` on a value is not eq to where it points an field's value")
+                        }
+                    }
+                    Field::Collex(collex) => { collex.unchecked_get(value) }
+                }
+            _ => panic!("Called `FieldCollex::unchecked_get()` on a value points an empty field")
+        }
+    }
+    
+    
+    pub(crate) fn get_mut(&mut self, value: V) -> Option<&mut E> {
+        let idx = self.idx_of(&value);
+        if self.contains_idx(idx) {
+            match &mut self.items[idx] {
+                RawField::Thing((_, k)) =>
+                    match k {
+                        Field::Elem(e) => {
+                            if value.eq(e.collexate_ref()) {
+                                Some(e)
+                            } else {
+                                None
+                            }
+                        }
+                        Field::Collex(collex) => { collex.get_mut(value) }
+                    }
+                _ => None
+            }
+        } else { None }
+    }
+    
+    pub(crate) fn unchecked_get_mut(&mut self, value: V) -> &mut E {
+        let idx = self.idx_of(&value);
+        match &mut self.items[idx] {
+            RawField::Thing((_, k)) =>
+                match k {
+                    Field::Elem(e) => {
+                        if value.eq(e.collexate_ref()) {
+                            e
+                        } else {
+                            panic!("Called `FieldCollex::unchecked_get_mut()` on a value is not eq to where it points an field's value")
+                        }
+                    }
+                    Field::Collex(collex) => { collex.unchecked_get_mut(value) }
+                }
+            _ => panic!("Called `FieldCollex::unchecked_get_mut()` on a value points an empty field")
+        }
+    }
+    
 }
 
 #[cfg(test)]
