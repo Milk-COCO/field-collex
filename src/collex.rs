@@ -5,6 +5,12 @@ use std::vec::Vec;
 use thiserror::Error;
 use crate::*;
 
+fn dist_cmp<T: FieldValue>(target:T, a:T, b:T) -> std::cmp::Ordering {
+    let dist_a = if a > target { a - target } else { target - a };
+    let dist_b = if b > target { b - target } else { target - b };
+    dist_a.cmp(&dist_b)
+}
+
 type FieldIn<E,V> = Field<E,FieldCollex<E,V>>;
 type CollexField<E,V> = RawField<Field<E,FieldCollex<E,V>>>;
 
@@ -999,6 +1005,75 @@ where
                     cmp,
                     is_edge
                 )}
+        }
+    }
+    
+    pub fn find_closest(&self, target: V) -> Option<&E> {
+        use RawField::*;
+        use Field::*;
+        
+        let t_idx = self.get_index(&target).ok()?;
+        // 上面get_index内已经判空。
+        // t位是thing -> t位属于t位 -> 是Collex则进入
+        //                        -> 是Elem返回其
+        //           -> t大于最大 -> t+1最小值与t最大值比较
+        //           -> t小于最小 -> t-1最大值与t最小值比较
+        // t位不是Thing -> 下一个最小值与上一个最大值比较
+        
+        match &self.items[t_idx] {
+            Thing(field) => {
+                match &field.1 {
+                    Collex(c) => {
+                        let first = field.1.first();
+                        if target.ge(first.collexate_ref()){
+                            let last = field.1.last();
+                            if target.le(last.collexate_ref()) {
+                                c.find_closest(target)
+                            } else { // 大于最大
+                                 Some(
+                                     self.items.get(t_idx+1)
+                                         .map(|v|
+                                             self.thing_dist_cmp_get(target, last,
+                                                                     v.as_thing().1.first()
+                                             )
+                                         )
+                                         .unwrap_or(last)
+                                 )
+                            }
+                        } else{ // 小于最小
+                            Some(
+                                self.items.get(t_idx-1)
+                                    .map(|v|
+                                        self.thing_dist_cmp_get(target,
+                                                                v.as_thing().1.last(),
+                                                                first
+                                        )
+                                    )
+                                    .unwrap_or(first)
+                            )
+                        }
+                    }
+                    Elem(e) => Some(&e),
+                }
+            } 
+            Next(ans) => Some(&self.items[*ans].as_thing().1.first()),
+            Prev(ans) => Some(&self.items[*ans].as_thing().1.last()),
+            Among(prev,next) => {
+                let prev = self.items[*prev].as_thing().1.last();
+                let next = self.items[*next].as_thing().1.first();
+                Some(self.thing_dist_cmp_get(target, prev, next))
+            }
+            Void => None,
+        }
+    }
+    
+    pub(crate) fn thing_dist_cmp_get<'a>(&'a self, target:V, prev: &'a E, next: &'a E) -> &'a E{
+        use std::cmp::Ordering::*;
+        match dist_cmp(target, prev.collexate(), next.collexate()){
+            Less => {prev}
+            // 不可能存储value相同的元素
+            Equal => {unreachable!()}
+            Greater => {next}
         }
     }
     

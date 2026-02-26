@@ -166,6 +166,11 @@ where
         ans.map(|elem| elem.0)
     }
     
+    pub fn find_closest(&self, target: V) -> Option<V> {
+        let ans = self.0.find_closest(target);
+        ans.map(|elem| elem.0)
+    }
+    
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
