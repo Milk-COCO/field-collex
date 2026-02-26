@@ -180,6 +180,19 @@ pub enum ModifyFieldCollexError<R,E> {
     InsertError(InsertFieldCollexError<(R,E)>),
 }
 
+impl<R,E> ModifyFieldCollexError<R,E> {
+    pub fn map<F,N>(self, f: F) -> ModifyFieldCollexError<R, N>
+    where
+        F: FnOnce((R,E)) -> (R,N)
+    {
+        use ModifyFieldCollexError::*;
+        match self {
+            CannotFind => CannotFind,
+            InsertError(err) => InsertError(err.map(f)),
+        }
+    }
+}
+
 pub trait Collexetable<V> {
     fn collexate(&self) -> V;
     fn collexate_ref(&self) -> &V;
