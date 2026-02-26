@@ -5,6 +5,8 @@ use crate::collex::*;
 type FieldIn<V> = Field<V,FieldSet<V>>;
 type SetField<V> = RawField<Field<V,FieldSet<V>>>;
 
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
 #[derive(Debug)]
 #[repr(transparent)]
 pub(crate) struct SetElem<V: FieldValue>(V);
