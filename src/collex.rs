@@ -150,6 +150,17 @@ impl<E> InsertFieldCollexError<E> {
             Self::OutOfSpan(e) => e,
         }
     }
+    
+    pub fn map<F,N>(self, f: F) -> InsertFieldCollexError<N>
+    where
+        F: FnOnce(E) -> N
+    {
+        use InsertFieldCollexError::*;
+        match self {
+            AlreadyExist(e) => AlreadyExist(f(e)),
+            OutOfSpan(e) => OutOfSpan(f(e)),
+        }
+    }
 }
 
 
@@ -157,6 +168,15 @@ impl<E> InsertFieldCollexError<E> {
 pub struct TryExtendResult<V> {
     pub out_of_span: Vec<V>,
     pub already_exist: Vec<V>
+}
+
+pub(crate) type ModifyResult<R,E> = Result<R,ModifyFieldCollexError<R,E>>;
+#[derive(Error)]
+pub enum ModifyFieldCollexError<R,E> {
+    #[error("找不到对应元素")]
+    CannotFind,
+    #[error("刷新元素位置失败")]
+    InsertError(InsertFieldCollexError<(R,E)>),
 }
 
 pub trait Collexetable<V> {
@@ -1176,6 +1196,60 @@ where
                 }
             _ => panic!("Called `FieldCollex::unchecked_get_mut()` on a value points an empty field")
         }
+    }
+    
+    /// 闭包结束后，会根据Value是否发生变化来决定是否更新其在Collex中的位置
+    ///
+    /// 若更新后的值无法容纳于本Collex，将直接通过错误类型的变体返还
+    pub fn modify<F,R>(&mut self, value: V, op: F) -> ModifyResult<R,E>
+    where
+        F: Fn(&mut E) -> R
+    {
+        use ModifyFieldCollexError::*;
+        
+        let elem = self.get_mut(value).ok_or(CannotFind)?;
+        let old_v = elem.collexate();
+        let result = op(elem);
+        if old_v.eq(elem.collexate_ref()) {
+            Ok(result)
+        } else {
+            // TODO: 优化逻辑
+            let new_v = elem.collexate();
+            *elem.collexate_mut() = old_v;
+            let mut new_e = self.remove(old_v).unwrap();
+            *new_e.collexate_mut() = new_v;
+            match self.insert(new_e) {
+                Ok(()) => Ok(result),
+                Err(err) => Err(InsertError(err.map(|e| (result,e)))),
+            }
+        }
+    }
+    
+    /// 闭包结束后，会根据Value是否发生变化来决定是否更新其在Collex中的位置
+    ///
+    /// # Panics
+    /// 若无法找到对应的元素，panic
+    ///
+    /// 若更新后的值无法容纳于本Collex，将直接Panic
+    pub fn unchecked_modify<F,R>(&mut self, value: V, op: F) -> R
+    where
+        F: Fn(&mut E) -> R
+    {
+        let elem = self.unchecked_get_mut(value);
+        let old_v = elem.collexate();
+        let result = op(elem);
+        if old_v.eq(elem.collexate_ref()) {
+            // do nothing
+        } else {
+            let new_v = elem.collexate();
+            *elem.collexate_mut() = old_v;
+            let mut new_e = self.remove(old_v).unwrap();
+            *new_e.collexate_mut() = new_v;
+            if let Err(_) = self.insert(new_e) {
+                panic!("Called `FieldCollex::insert` in `FieldCollex::unchecked_modify` but get an error");
+            }
+        }
+        result
     }
     
 }
