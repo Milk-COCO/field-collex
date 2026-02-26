@@ -172,6 +172,7 @@ pub struct TryExtendResult<V> {
 
 pub(crate) type ModifyResult<R,E> = Result<R,ModifyFieldCollexError<R,E>>;
 #[derive(Error)]
+#[derive(Debug)]
 pub enum ModifyFieldCollexError<R,E> {
     #[error("找不到对应元素")]
     CannotFind,
@@ -1448,7 +1449,8 @@ mod tests {
     fn test_with_elements() {
         // 测试：with_elements（批量构造）
         let span = Span::new_finite(0u32, 100u32);
-        let unit = 10u32;
+        // 实际运用场景建议使用5或10（即使目前没这么多元素）要保持尽量不分层！
+        let unit = 50u32;
         let elems = vec![TestElem(5), TestElem(15), TestElem(25), TestElem(105)]; // 105超出span
         
         // 构造FieldCollex
@@ -1459,5 +1461,84 @@ mod tests {
         assert!(!collex.contains(&TestElem(105)));
         assert_eq!(collex.first(), Some(&TestElem(5)));
         assert_eq!(collex.last(), Some(&TestElem(25)));
+    }
+    
+    
+    #[test]
+    fn test_find_closest() {
+        // 测试：find_closest
+        let span = Span::new_finite(0u32, 100u32);
+        // 实际运用场景建议使用5或10（即使目前没这么多元素）要保持尽量不分层！
+        let unit = 50u32;
+        let elems = vec![TestElem(5), TestElem(15), TestElem(25), TestElem(105)]; // 105超出span
+        
+        // 构造FieldCollex
+        let collex = FieldCollex::<TestElem, u32>::with_elements(span, unit, elems).unwrap();
+        // 相等直接取
+        assert_eq!(collex.find_closest(5), Some(&TestElem(5)));
+        assert_eq!(collex.find_closest(25), Some(&TestElem(25)));
+        // 俩距相同取更小
+        assert_eq!(collex.find_closest(10), Some(&TestElem(5)));
+        assert_eq!(collex.find_closest(20), Some(&TestElem(15)));
+        // 越界取边界
+        assert_eq!(collex.find_closest(114514), Some(&TestElem(25)));
+        // 边界仅1值
+        assert_eq!(collex.find_closest(0), Some(&TestElem(5)));
+        // 未分配时取边界
+        assert_eq!(collex.find_closest(100), Some(&TestElem(25)));
+    }
+    
+    #[test]
+    fn test_get() {
+        // 测试：get系列函数
+        let span = Span::new_finite(0u32, 100u32);
+        let unit = 10u32;
+        let elems = vec![TestElem(5), TestElem(15), TestElem(25)];
+        
+        // 构造FieldCollex
+        let collex = FieldCollex::<TestElem, u32>::with_elements(span, unit, elems).unwrap();
+        assert_eq!(collex.get(5), Some(&TestElem(5)));
+        assert_eq!(collex.unchecked_get(15), &TestElem(15));
+        assert_eq!(collex.get(25), Some(&TestElem(25)));
+        assert_eq!(collex.get(0), None);
+        assert_eq!(collex.get(10), None);
+        assert_eq!(collex.get(114514), None);
+    }
+    
+    
+    #[test]
+    fn test_modify() {
+        // 测试：modify系列函数
+        let span = Span::new_finite(0u32, 100u32);
+        let unit = 10u32;
+        let elems = vec![TestElem(5),  TestElem(25),  TestElem(35),  TestElem(45)];
+        
+        // 构造FieldCollex
+        let mut collex = FieldCollex::<TestElem, u32>::with_elements(span, unit, elems).unwrap();
+        
+        assert_eq!(collex.first(), Some(&TestElem(5)));
+        
+        // Value未修改
+        // ... edit other field (but there we do nothing)
+        collex.modify(5,|_| ()).unwrap();
+        assert_eq!(collex.first(), Some(&TestElem(5)));
+        
+        // 修改Value但依旧在此位置
+        collex.modify(5,|v| v.0=1 ).unwrap();
+        assert_eq!(collex.first(), Some(&TestElem(1)));
+        
+        // 修改Value，改变位置
+        let ans = collex.modify(1,|v| v.0=15 );
+        assert_eq!(collex.first(), Some(&TestElem(15)));
+        
+        // 修改Value，移到别的后面
+        collex.modify(15,|v| v.0=26 ).unwrap();
+        assert_eq!(collex.first(), Some(&TestElem(25)));
+        
+        
+        // 改改别的吧
+        let ans = collex.modify(45,|v| v.0=0 );
+        assert_eq!(collex.first(), Some(&TestElem(0)));
+        
     }
 }
