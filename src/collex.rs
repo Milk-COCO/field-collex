@@ -1059,38 +1059,46 @@ where
         
         match &self.items[t_idx] {
             Thing(field) => {
-                match &field.1 {
-                    Collex(c) => {
-                        let first = field.1.first();
-                        if target.ge(first.collexate_ref()){
-                            let last = field.1.last();
-                            if target.le(last.collexate_ref()) {
+                let first = field.1.first();
+                if target.ge(first.collexate_ref()){
+                    let last = field.1.last();
+                    if target.le(last.collexate_ref()) {
+                        match &field.1 {
+                            Collex(c) => {
                                 c.find_closest(target)
-                            } else { // 大于最大
-                                 Some(
-                                     self.items.get(t_idx+1)
-                                         .map(|v|
-                                             self.thing_dist_cmp_get(target, last,
-                                                                     v.as_thing().1.first()
-                                             )
-                                         )
-                                         .unwrap_or(last)
-                                 )
                             }
-                        } else{ // 小于最小
-                            Some(
-                                self.items.get(t_idx-1)
+                            Elem(e) => Some(&e),
+                        }
+                    } else { // 大于最大
+                        Some(
+                            if t_idx < self.len() {
+                                self.items.get(t_idx + 1)
                                     .map(|v|
-                                        self.thing_dist_cmp_get(target,
-                                                                v.as_thing().1.last(),
-                                                                first
+                                        self.thing_dist_cmp_get(target, last,
+                                                                v.as_thing().1.first()
                                         )
                                     )
-                                    .unwrap_or(first)
-                            )
-                        }
+                                    .unwrap_or(last)
+                            } else{
+                                last
+                            }
+                        )
                     }
-                    Elem(e) => Some(&e),
+                } else { // 小于最小
+                    Some(
+                        if t_idx != 0 {
+                            self.items.get(t_idx-1)
+                                .map(|v|
+                                    self.thing_dist_cmp_get(target,
+                                                            v.as_thing().1.last(),
+                                                            first
+                                    )
+                                )
+                                .unwrap_or(first)
+                        } else {
+                            first
+                        }
+                    )
                 }
             } 
             Next(ans) => Some(&self.items[*ans].as_thing().1.first()),
