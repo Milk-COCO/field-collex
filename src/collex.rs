@@ -1028,6 +1028,9 @@ where
         }
     }
     
+    /// 找到最近的
+    ///
+    /// 两边距离相等时返回更小的
     pub fn find_closest(&self, target: V) -> Option<&E> {
         use RawField::*;
         use Field::*;
@@ -1092,7 +1095,7 @@ where
         match dist_cmp(target, prev.collexate(), next.collexate()){
             Less => {prev}
             // 不可能存储value相同的元素
-            Equal => {unreachable!()}
+            Equal => {prev}
             Greater => {next}
         }
     }
