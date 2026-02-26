@@ -162,6 +162,7 @@ pub struct TryExtendResult<V> {
 pub trait Collexetable<V> {
     fn collexate(&self) -> V;
     fn collexate_ref(&self) -> &V;
+    fn collexate_mut(&mut self) -> &mut V;
     
     fn collex_cmp<O>(&self, other: &O) -> std::cmp::Ordering
     where
@@ -1195,6 +1196,10 @@ mod tests {
         
         fn collexate_ref(&self) -> &u32 {
             &self.0
+        }
+        
+        fn collexate_mut(&mut self) -> &mut u32 {
+            &mut self.0
         }
     }
     

@@ -18,6 +18,10 @@ impl<V: FieldValue> Collexetable<V> for SetElem<V>
     fn collexate_ref(&self) -> &V {
         &self.0
     }
+    
+    fn collexate_mut(&mut self) -> &mut V {
+        &mut self.0
+    }
 }
 
 fn elem_to_v_vec<V: FieldValue>(vec: Vec<SetElem<V>>) -> Vec<V> {
