@@ -142,25 +142,25 @@ where
         
         ans.map(|elem| elem.0)
     }
-    pub fn find_gt(&self, target: V) -> FindResult<V>
+    pub fn find_gt(&self, target: V) -> Option<V>
     {
         let ans = self.0.find_gt(target);
         ans.map(|elem| elem.0)
     }
     
-    pub fn find_ge(&self, target: V) -> FindResult<V>
+    pub fn find_ge(&self, target: V) -> Option<V>
     {
         let ans = self.0.find_ge(target);
         ans.map(|elem| elem.0)
     }
     
-    pub fn find_lt(&self, target: V) -> FindResult<V>
+    pub fn find_lt(&self, target: V) -> Option<V>
     {
         let ans = self.0.find_lt(target);
         ans.map(|elem| elem.0)
     }
     
-    pub fn find_le(&self, target: V) -> FindResult<V>
+    pub fn find_le(&self, target: V) -> Option<V>
     {
         let ans = self.0.find_le(target);
         ans.map(|elem| elem.0)
@@ -311,8 +311,8 @@ mod tests {
         assert_eq!(le, 25u32);
         
         // 错误场景：找不到匹配值
-        let err_find = set.find_gt(30u32).unwrap_err();
-        assert!(matches!(err_find, FindFieldCollexError::CannotFind));
+        let err_find = set.find_gt(30u32);
+        assert!(matches!(err_find, None));
     }
     
     #[test]

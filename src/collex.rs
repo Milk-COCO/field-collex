@@ -115,22 +115,7 @@ macro_rules! impl_from_get_index_err {
     };
 }
 
-impl_from_get_index_err!(FindFieldCollexError);
 impl_from_get_index_err!(RemoveFieldCollexError, NotExist);
-
-
-pub(crate) type FindResult<T> = Result<T, FindFieldCollexError>;
-
-#[derive(Error, Debug)]
-pub enum FindFieldCollexError {
-    #[error("目标值超出了当前FieldCollex的span范围")]
-    OutOfSpan,
-    #[error("无匹配的数据")]
-    CannotFind,
-    #[error("当前无数据可查询")]
-    Empty,
-}
-
 
 pub(crate) type RemoveResult<T> = Result<T, RemoveFieldCollexError>;
 
@@ -466,13 +451,12 @@ where
         idx < self.items.len()
     }
     
-    /// 查找对应元素是否存在
+    /// 查找对应是否存在与其collexate()值相同的元素
     ///
     pub fn contains(&self, elem: &E) -> bool {
         let idx = self.idx_of(elem.collexate_ref());
         if self.contains_idx(idx) {
-            match &self.items[idx]
-            {
+            match &self.items[idx] {
                 RawField::Thing((_, k)) =>
                     match k {
                         Field::Elem(e) => { elem.collex_eq(e) }
@@ -928,7 +912,7 @@ where
         ans.1
     }
     
-    pub fn find_gt(&self, target: V) -> FindResult<&E> {
+    pub fn find_gt(&self, target: V) -> Option<&E> {
         let last_idx = self.len() - 1;
         self.find_in(
             target,
@@ -940,7 +924,7 @@ where
     }
     
     
-    pub fn find_ge(&self, target: V) -> FindResult<&E> {
+    pub fn find_ge(&self, target: V) -> Option<&E> {
         let last_idx = self.len() - 1;
         self.find_in(
             target,
@@ -951,7 +935,7 @@ where
         )
     }
     
-    pub fn find_lt(&self, target: V) -> FindResult<&E> {
+    pub fn find_lt(&self, target: V) -> Option<&E> {
         self.find_in(
             target,
             |idx| idx-1 ,
@@ -962,7 +946,7 @@ where
     }
     
     
-    pub fn find_le(&self, target: V) -> FindResult<&E> {
+    pub fn find_le(&self, target: V) -> Option<&E> {
         self.find_in(
             target,
             |idx| idx-1 ,
@@ -981,22 +965,19 @@ where
         thing_idx: fn(&CollexField<E, V>) -> Option<Result<usize, usize>>,
         cmp: fn(&FieldIn<E, V>, &V) -> bool,
         is_edge: impl Fn(usize) -> bool,
-    ) -> FindResult<&E> {
-        use FindFieldCollexError::*;
-        
-        let t_idx = self.get_index(&target)
-            .map_err(Into::<FindFieldCollexError>::into)?;
+    ) -> Option<&E> {
+        let t_idx = self.get_index(&target).ok()?;
         // 上面get_index内已经判空。
         // 结果落在t位 -> t位的最大值(大于)t -> t位已经足够，进入t位
         //           -> t位的最大值不(大于)t -> t+1位必然超过t位，进入下一位
         // 结果落在非t位 -> 必然超过t位，进入此位
-        let f_idx = match thing_idx(&self.items[t_idx]).ok_or(CannotFind)? {
+        let f_idx = match thing_idx(&self.items[t_idx])? {
             Ok(idx) => {
                 if cmp(&self.items[idx].as_thing().1, &target) {
                     idx
                 } else {
                     if is_edge(idx) {
-                        return Err(CannotFind)
+                        return None
                     } else {
                         next(idx)
                     }
@@ -1009,7 +990,7 @@ where
         
         // 必然是thing
         match self.items[f_idx].as_thing().1 {
-            Field::Elem(e) => {Ok(e)}
+            Field::Elem(e) => {Some(e)}
             Field::Collex(collex) => {
                 collex.find_in(
                     target,
@@ -1201,8 +1182,8 @@ mod tests {
         assert_eq!(*le, TestElem(25));
         
         // 错误场景：找不到匹配值
-        let err_find = collex.find_gt(30u32).unwrap_err();
-        assert!(matches!(err_find, FindFieldCollexError::CannotFind));
+        let err_find = collex.find_gt(30u32);
+        assert!(matches!(err_find, None));
     }
     
     #[test]
