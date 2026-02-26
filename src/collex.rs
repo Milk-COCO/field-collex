@@ -1,3 +1,5 @@
+pub mod iter;
+
 use span_core::Span;
 use std::mem;
 use std::ops::Range;
