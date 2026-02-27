@@ -327,7 +327,7 @@ where
             let mut last_idx = index_of!(new,vec[0].collexate_ref());
             // 存在前置空块（自己为起点(==0)就是不存在）
             if last_idx != 0 {
-                items.resize(last_idx ,RawField::Prev(last_idx));
+                items.resize(last_idx ,RawField::Next(last_idx));
             }
             let _ = other.split_off(first_oob_idx);
             let mut vec = other.into_iter();
@@ -589,21 +589,23 @@ where
     }
     
     
+    /// 找到第一个值的引用
     pub fn first(&self) -> Option<&E> {
         Some(self.first_field()?.1.first())
     }
     
+    /// 找最后一个值的引用
     pub fn last(&self) -> Option<&E> {
         Some(self.last_field()?.1.last())
     }
     
     
-    /// 找到第一个非空块的(键,块引用)，即第一个元素
+    /// 找到第一个非空块的(键,块引用)
     pub(crate) fn first_field(&self) -> Option<(usize,&FieldIn<E, V>)> {
         Some(self.items[self.first_index()?].as_thing())
     }
     
-    /// 找到最后一个非空块的(键,块引用)，即最后一个元素
+    /// 找到最后一个非空块的(键,块引用)
     pub(crate) fn last_field(&self) -> Option<(usize,&FieldIn<E, V>)> {
         Some(self.items[self.last_index()?].as_thing())
     }
@@ -611,7 +613,8 @@ where
     
     /// 找到第一个非空块的索引
     pub(crate) fn first_index(&self) -> Option<usize> {
-        self.items.first()?.thing_next()
+        let first = self.items.first()?;
+        first.thing_next()
     }
     
     /// 找到最后一个非空块的索引
