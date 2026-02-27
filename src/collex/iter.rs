@@ -113,7 +113,9 @@ where
     E: Collexetable<V>,
     V: FieldValue,
 {
+    // 持有 vec::IntoIter 所有权（消耗型，不可克隆）
     Outer(std::vec::IntoIter<CollexField<E, V>>),
+    // 持有子 Collex 的 IntoIter 所有权
     Inner(IntoIter<E, V>),
 }
 
@@ -132,6 +134,7 @@ where
     V: FieldValue,
 {
     pub(crate) fn new(collex: FieldCollex<E, V>) -> Self {
+        // 转移 items 所有权到 vec::IntoIter（消耗原 FieldCollex 的 items）
         let outer_iter = collex.items.into_iter();
         Self {
             stack: vec![IntoIterStackItem::Outer(outer_iter)],
@@ -139,6 +142,7 @@ where
     }
 }
 
+// 核心修复：无克隆、真正消耗所有权的 Iterator 实现
 impl<E, V> Iterator for IntoIter<E, V>
 where
     E: Collexetable<V>,
@@ -147,36 +151,63 @@ where
     type Item = E;
     
     fn next(&mut self) -> Option<Self::Item> {
+        // 循环处理栈顶迭代器（所有权转移）
         while let Some(mut iter_item) = self.stack.pop() {
             match &mut iter_item {
                 IntoIterStackItem::Outer(outer_iter) => {
+                    // 遍历外层迭代器（消耗式）
                     while let Some(field) = outer_iter.next() {
                         match field {
                             RawField::Thing((_, field_in)) => match field_in {
+                                // 匹配到元素：直接返回所有权，同时把剩余迭代器放回栈
                                 Field::Elem(e) => {
-                                    // 把剩余的迭代器放回栈（使用 by_ref 避免移动所有权）
-                                    self.stack.push(IntoIterStackItem::Outer(outer_iter.by_ref().clone()));
+                                    // 把「剩余未处理的外层迭代器」放回栈（无克隆，转移剩余所有权）
+                                    self.stack.push(IntoIterStackItem::Outer(std::mem::take(outer_iter)));
                                     return Some(e);
                                 }
+                                // 匹配到子 Collex：转移子 Collex 所有权，创建子迭代器压栈
                                 Field::Collex(collex) => {
-                                    self.stack.push(IntoIterStackItem::Outer(outer_iter.by_ref().clone()));
+                                    // 1. 把当前剩余的外层迭代器放回栈
+                                    self.stack.push(IntoIterStackItem::Outer(std::mem::take(outer_iter)));
+                                    // 2. 把子 Collex 迭代器压入栈（优先处理子迭代器）
                                     self.stack.push(IntoIterStackItem::Inner(IntoIter::new(collex)));
+                                    // 跳出当前循环，处理子迭代器
                                     break;
                                 }
                             },
+                            // 空块：跳过，继续遍历外层迭代器
                             RawField::Prev(_) | RawField::Among(_, _) | RawField::Next(_) | RawField::Void => continue,
                         }
                     }
+                    // 外层迭代器已耗尽，无需放回栈
                 }
                 IntoIterStackItem::Inner(inner_iter) => {
+                    // 处理子迭代器（消耗式）
                     if let Some(item) = inner_iter.next() {
+                        // 子迭代器未耗尽，放回栈继续处理
                         self.stack.push(iter_item);
                         return Some(item);
                     }
+                    // 子迭代器已耗尽，无需放回栈
                 }
             }
         }
+        // 所有迭代器处理完毕
         None
+    }
+}
+
+/// FieldCollex 所有权转移的 IntoIterator 实现（核心：消耗 self）
+impl<E, V> IntoIterator for FieldCollex<E, V>
+where
+    E: Collexetable<V>,
+    V: FieldValue,
+{
+    type Item = E;
+    type IntoIter = IntoIter<E, V>;
+    
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter::new(self)
     }
 }
 
@@ -193,27 +224,15 @@ where
     }
 }
 
-impl<E, V> IntoIterator for FieldCollex<E, V>
-where
-    E: Collexetable<V>,
-    V: FieldValue,
-{
-    type Item = E;
-    type IntoIter = IntoIter<E, V>;
-    
-    fn into_iter(self) -> Self::IntoIter {
-        IntoIter::new(self)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use span_core::Span;
     
     // ===================== 测试用元素类型（实现Collexetable<u32>） =====================
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
-    struct TestElem(u32);
+    #[derive(Debug, PartialEq, Eq, Ord, PartialOrd)]
+    #[derive(Clone)]
+struct TestElem(u32);
     
     impl Collexetable<u32> for TestElem {
         fn collexate(&self) -> u32 {
