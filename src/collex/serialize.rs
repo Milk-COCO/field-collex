@@ -17,6 +17,14 @@ where
     }
 }
 
+pub fn default_span<V: FieldValue>() -> Span<V> {
+    Span::new_infinite(V::zero())
+}
+
+pub fn default_unit<V: FieldValue>() -> V {
+    V::from_usize(1)
+}
+
 /// 用于反序列化的辅助结构体（包含 Span、unit 和元素列表）
 #[derive(Deserialize)]
 pub struct FieldCollexSerdeHelper<E, V>
@@ -24,7 +32,9 @@ where
     E: Collexetable<V>,
     V: FieldValue,
 {
+    #[serde[default = "default_span"]]
     pub span: Span<V>,
+    #[serde[default = "default_unit"]]
     pub unit: V,
     pub elements: Vec<E>,
 }
