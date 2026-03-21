@@ -19,7 +19,7 @@ type CollexField<E,V> = RawField<Field<E,FieldCollex<E,V>>>;
 
 pub(crate) type NewResult<T,V> = Result<T, NewFieldCollexError<V>>;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum NewFieldCollexError<V>{
     #[error("提供的 span 为空（大小为0）")]
     EmptySpan(Span<V>, V),
@@ -40,7 +40,7 @@ impl<V> NewFieldCollexError<V>{
 
 pub(crate) type WithCapacityResult<T,V> = Result<T, WithCapacityFieldCollexError<V>>;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum WithCapacityFieldCollexError<V>{
     #[error("提供的 span 为空（大小为0）")]
     EmptySpan(Span<V>, V),
@@ -71,7 +71,7 @@ impl<V> From<NewFieldCollexError<V>> for WithElementsFieldCollexError<V> {
 
 pub(crate) type WithElementsResult<T,V> = Result<T, WithElementsFieldCollexError<V>>;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum WithElementsFieldCollexError<V>{
     #[error("提供的 span 为空（大小为0）")]
     EmptySpan(Span<V>, V),
@@ -93,7 +93,7 @@ impl<V> WithCapacityFieldCollexError<V>{
 
 pub(crate) type GetIndexResult<T> = Result<T, GetIndexFieldCollexError>;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum GetIndexFieldCollexError {
     #[error("目标值超出了当前FieldCollex的span范围")]
     OutOfSpan,
@@ -128,7 +128,7 @@ impl_from_get_index_err!(RemoveFieldCollexError, NotExist);
 
 pub(crate) type RemoveResult<T> = Result<T, RemoveFieldCollexError>;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum RemoveFieldCollexError {
     #[error("目标值超出了当前FieldCollex的span范围")]
     OutOfSpan,
@@ -138,7 +138,7 @@ pub enum RemoveFieldCollexError {
 
 
 pub(crate) type InsertResult<E> = Result<(), InsertFieldCollexError<E>>;
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum InsertFieldCollexError<E> {
     #[error("提供值超出了当前FieldCollex的span范围")]
     OutOfSpan(E),
@@ -167,15 +167,14 @@ impl<E> InsertFieldCollexError<E> {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TryExtendResult<V> {
     pub out_of_span: Vec<V>,
     pub already_exist: Vec<V>
 }
 
 pub(crate) type ModifyResult<R,T> = Result<R,ModifyFieldCollexError<T>>;
-#[derive(Error)]
-#[derive(Debug)]
+#[derive(Error, Clone, Debug)]
 pub enum ModifyFieldCollexError<T> {
     #[error("找不到对应元素")]
     CannotFind,
@@ -230,7 +229,7 @@ pub trait Collexetable<V> {
 /// 非空块可为单个元素或一个FieldCollex，以[`Field`]类型存储。
 ///
 /// 实际存入E，计算时通过Collexetable<V>中的方法得到V，剩余与FieldSet完全一致
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FieldCollex<E,V>
 where
     E: Collexetable<V>,
@@ -327,7 +326,7 @@ where
             let mut last_idx = index_of!(new,vec[0].collexate_ref());
             // 存在前置空块（自己为起点(==0)就是不存在）
             if last_idx != 0 {
-                items.resize(last_idx ,RawField::Next(last_idx));
+                items.resize_with(last_idx ,|| RawField::Next(last_idx));
             }
             let _ = other.split_off(first_oob_idx);
             let mut vec = other.into_iter();
@@ -390,7 +389,7 @@ where
                         }
                     };
                 } else { // 与上一个处于不同区间，先填充Among再push自己
-                    items.resize(this_idx, RawField::Among(last_idx, this_idx));
+                    items.resize_with(this_idx, ||RawField::Among(last_idx, this_idx));
                     items.push(RawField::Thing((this_idx, Field::Elem(elem))))
                 }
                 last_idx = this_idx;
@@ -464,7 +463,7 @@ where
                     RawField::prev_from(t)
                 } else {
                     // 上面确保不是thing
-                    last.clone()
+                    last.unchecked_clone()
                 }
             }
         };
@@ -484,7 +483,7 @@ where
     
     pub(crate) fn expand_to(&mut self, new_size: usize, filler: CollexField<E,V>) -> bool {
         if self.items.len() < new_size {
-            self.items.resize(new_size, filler);
+            self.items.resize_with(new_size, ||filler.unchecked_clone());
             true
         } else { false }
     }
@@ -787,7 +786,7 @@ where
                             RawField::Next(_) | RawField::Thing(_) => unreachable!()
                         };
                         
-                        items[first_idx..len].fill(prev.clone());
+                        items[first_idx..len].fill_with(||prev.unchecked_clone());
                         prev
                     }
                 }
@@ -800,7 +799,7 @@ where
         // reserve expand push
         let need_cap  = idx + 1 - len;
         items.reserve(need_cap);
-        items.resize(idx, prev);
+        items.resize_with(idx, || prev.unchecked_clone());
         items.push(RawField::Thing((idx, Field::Elem(value))));
         Ok(())
     }
@@ -831,7 +830,7 @@ where
                         RawField::Thing(_) => unreachable!()
                     };
                     
-                    items[first_idx..idx].fill(prev);
+                    items[first_idx..idx].fill_with(||prev.unchecked_clone());
                 }
                 // 非最后且后一个非Thing
                 if idx != len - 1 && !matches!(items[idx+1], RawField::Thing(_)) {
@@ -842,7 +841,7 @@ where
                         RawField::Thing(_) => unreachable!()
                     };
                     
-                    items[idx+1..last_idx].fill(next);
+                    items[idx+1..last_idx].fill_with(||next.unchecked_clone());
                 }
             }
             ans
@@ -900,14 +899,14 @@ where
         this.items[0..idx].iter_mut().rev()
             .take_while(|v| !matches!(v, RawField::Thing(_)) )
             .for_each(|v| {
-                *v = filler.clone();
+                *v = filler.unchecked_clone();
             });
         
         // 向后更新
         this.items[idx+1..len].iter_mut()
             .take_while(|v| !matches!(v, RawField::Thing(_)) )
             .for_each(|v| {
-                *v = filler.clone();
+                *v = filler.unchecked_clone();
             });
         
         // 更新自己

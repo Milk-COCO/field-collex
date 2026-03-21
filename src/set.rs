@@ -6,8 +6,8 @@ type FieldIn<V> = Field<V,FieldSet<V>>;
 type SetField<V> = RawField<Field<V,FieldSet<V>>>;
 
 #[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 #[serde(transparent)]
-#[derive(Debug)]
 #[repr(transparent)]
 pub(crate) struct SetElem<V: FieldValue>(V);
 
@@ -52,7 +52,7 @@ type In<V> = FieldCollex<SetElem<V>,V>;
 
 /// 每个块可以存多个内容（通过递归结构实现）
 /// 非空块可为单个元素或一个FieldSet，以[`Field`]类型存储。
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FieldSet<V: FieldValue>(In<V>);
 
 impl<V> FieldSet<V>

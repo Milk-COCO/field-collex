@@ -177,7 +177,7 @@ pub(crate) trait FieldItem<V> {
 /// Next ：本块无元素，有后一个非空块，存其索引 <br>
 /// Void ：容器完全无任何元素 <br>
 ///
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RawField<V, IDX = usize> {
     Thing((IDX, V)),
     Prev (IDX),
@@ -278,6 +278,10 @@ impl<V> RawField<V> {
         }
     }
     
+    /// RawField的克隆（在Thing未知的情况下）是偏克隆：
+    ///
+    /// 当RawField为Thing变体时返回None，因为Thing不一定支持克隆！
+    ///
     pub fn partial_clone(&self) -> Option<Self> {
         match *self {
             RawField::Thing(_) => None,
@@ -289,6 +293,14 @@ impl<V> RawField<V> {
                 RawField::Thing(_) => unreachable!(),
             }),
         }
+    }
+    
+    /// 调用 partial_clone
+    ///
+    /// # Panics
+    /// 当RawField为Thing变体时panic，因为Thing不一定支持克隆！
+    pub fn unchecked_clone(&self) -> Self {
+        self.partial_clone().expect("Called `RawField::clone` on a `Thing` value")
     }
     
     /// 得到当前或上一个非空块的索引，使用变体区分
@@ -323,15 +335,7 @@ impl<V> RawField<V> {
     
 }
 
-impl<V> Clone for RawField<V> {
-    /// # Panics
-    /// 当RawField为Thing变体时panic，因为Thing不支持克隆！
-    fn clone(&self) -> Self {
-        self.partial_clone().expect("Called `RawField::clone` on a `Thing` value")
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Field<V,C>{
     Elem(V),
     Collex(C)
