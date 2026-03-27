@@ -1,5 +1,5 @@
 pub mod iter;
-pub mod serialize;
+pub mod se;
 
 use span_core::Span;
 use std::mem;
