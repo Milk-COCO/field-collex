@@ -732,20 +732,17 @@ where
                             }
                         }
                         Field::Collex(_) => {
-                            let old = mem::replace(&mut items[idx], RawField::Void);
-                            match old {
-                                RawField::Thing((_,mut t)) => {
+                            match &mut items[idx] {
+                                RawField::Thing((_,t)) => {
                                     match t {
-                                        Field::Collex(ref mut collex) => {
+                                        Field::Collex(collex) => {
                                             let ans = collex.insert(elem);
                                             match &ans {
                                                 Ok(_) => {}
-                                                Err(_) => {return (false,ans)}
+                                                Err(_) => {
+                                                    return (false,ans)
+                                                }
                                             }
-                                            let _ = mem::replace(
-                                                &mut items[idx],
-                                                RawField::Thing((idx,t))
-                                            );
                                         }
                                         _ => unreachable!()
                                     }
