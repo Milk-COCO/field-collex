@@ -683,18 +683,18 @@ where
         }
     }
     
-    pub(crate) fn insert_in_ib(&mut self, idx: usize, value: E) -> (bool, InsertResult<E>) {
+    pub(crate) fn insert_in_ib(&mut self, idx: usize, elem: E) -> (bool, InsertResult<E>) {
         use InsertFieldCollexError::*;
         let items = &mut self.items;
         
         let mut need_fill = false;
         // 插入处
             match &items[idx] {
-                RawField::Thing(t) => {
-                    match &t.1 {
+                RawField::Thing((_,t)) => {
+                    match t {
                         Field::Elem(e) => {
-                            if e.collex_eq(&value){
-                                return (false,Err(AlreadyExist(value)));
+                            if e.collex_eq(&elem){
+                                return (false,Err(AlreadyExist(elem)));
                             }
                             let span = Span::Finite({
                                 let start = *self.span.start() + self.unit * V::from_usize(idx);
@@ -727,7 +727,7 @@ where
                             if let Err(_) = collex.insert(old){
                                 panic!("Called `FieldCollex::insert` in `FieldCollex::insert_in_ib` but get an unexpected error");
                             }
-                            if let Err(_) = collex.insert(value) {
+                            if let Err(_) = collex.insert(elem) {
                                 panic!("Called `FieldCollex::insert` in `FieldCollex::insert_in_ib` but get an unexpected error");
                             }
                         }
@@ -737,7 +737,7 @@ where
                                 RawField::Thing((_,mut t)) => {
                                     match t {
                                         Field::Collex(ref mut collex) => {
-                                            let ans = collex.insert(value);
+                                            let ans = collex.insert(elem);
                                             match &ans {
                                                 Ok(_) => {}
                                                 Err(_) => {return (false,ans)}
@@ -759,14 +759,14 @@ where
                     need_fill = true;
                     let _ = mem::replace(
                         &mut items[idx],
-                        RawField::Thing((idx,Field::Elem(value)))
+                        RawField::Thing((idx,Field::Elem(elem)))
                     );
                 }
             }
         (need_fill,Ok(()))
     }
     
-    pub(crate) fn insert_in_ob(&mut self, idx: usize, value: E) -> InsertResult<E> {
+    pub(crate) fn insert_in_ob(&mut self, idx: usize, elem: E) -> InsertResult<E> {
         let items = &mut self.items;
         let len = items.len();
         
@@ -800,24 +800,24 @@ where
         let need_cap  = idx + 1 - len;
         items.reserve(need_cap);
         items.resize_with(idx, || prev.unchecked_clone());
-        items.push(RawField::Thing((idx, Field::Elem(value))));
+        items.push(RawField::Thing((idx, Field::Elem(elem))));
         Ok(())
     }
     
     /// 插入值
     ///
-    pub fn insert(&mut self, value: E) -> InsertResult<E> {
+    pub fn insert(&mut self, elem: E) -> InsertResult<E> {
         use InsertFieldCollexError::*;
         let span = self.span();
-        if !span.contains(value.collexate_ref()) { return Err(OutOfSpan(value)) }
+        if !span.contains(elem.collexate_ref()) { return Err(OutOfSpan(elem)) }
         
-        let idx = self.idx_of(value.collexate_ref());
+        let idx = self.idx_of(elem.collexate_ref());
         // 目标索引越界 -> 根据当前最后一个非空块计算前导 -> reserve expand push
         // 目标索引不越界 -> 填充
         let len = self.len();
         // 未越界（这里同时杜绝了len==0的情况）
         if idx < len {
-            let (need_fill,ans) = self.insert_in_ib(idx, value);
+            let (need_fill,ans) = self.insert_in_ib(idx, elem);
             if need_fill {
                 let items = &mut self.items;
                 // 当前为Thing时，并不需要修改其他块，因为他们存储的索引正常指向当前位置，不需要修改
@@ -846,7 +846,7 @@ where
             }
             ans
         } else { // 越界
-            self.insert_in_ob(idx, value)
+            self.insert_in_ob(idx, elem)
         }
     }
     
