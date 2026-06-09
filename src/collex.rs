@@ -1035,7 +1035,7 @@ where
             if cmp(field, &target) {
                 return match field {
                     Field::Elem(e) => Some(e),
-                    Field::Collex(c) => c.__in(target, is_forward, cmp),
+                    Field::Collex(c) => c.find_in(target, is_forward, cmp),
                 };
             }
 
