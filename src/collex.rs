@@ -942,7 +942,30 @@ where
          }
         )
     }
-    
+
+
+    /// O(1) 获取下一个 Thing 的索引
+    #[inline(always)]
+    fn next_thing_idx(&self, idx: usize) -> Option<usize> {
+        if idx + 1 >= self.items.len() { return None; }
+        match self.items[idx + 1] {
+            RawField::Thing(_) => Some(idx + 1),
+            RawField::Next(n) | RawField::Among(_, n) => Some(n),
+            _ => None,
+        }
+    }
+
+    /// O(1) 获取上一个 Thing 的索引
+    #[inline(always)]
+    fn prev_thing_idx(&self, idx: usize) -> Option<usize> {
+        if idx == 0 { return None; }
+        match self.items[idx - 1] {
+            RawField::Thing(_) => Some(idx - 1),
+            RawField::Prev(p) | RawField::Among(p, _) => Some(p),
+            _ => None,
+        }
+    }
+
     /// 删除对应值
     pub fn remove(&mut self, target: V) -> RemoveResult<E> {
         let idx = self.get_index(&target)
@@ -953,126 +976,95 @@ where
         }
         ans.1
     }
-    
+
     pub fn find_gt(&self, target: V) -> Option<&E> {
-        let last_idx = self.len() - 1;
-        self.find_in(
-            target,
-            |idx| idx+1 ,
-            |f| f.thing_or_next(),
-            |f,v| f.last().collexate_ref().gt(v),
-            move |idx| idx == last_idx,
-        )
+        if self.is_empty() { return None; }
+        self.find_in(target, true, |f, v| f.last().collexate_ref().gt(v))
     }
-    
-    
+
     pub fn find_ge(&self, target: V) -> Option<&E> {
-        let last_idx = self.len() - 1;
-        self.find_in(
-            target,
-            |idx| idx+1 ,
-            |f| f.thing_or_next(),
-            |f,v| f.last().collexate_ref().ge(v),
-            move |idx| idx == last_idx,
-        )
+        if self.is_empty() { return None; }
+        self.find_in(target, true, |f, v| f.last().collexate_ref().ge(v))
     }
-    
+
     pub fn find_lt(&self, target: V) -> Option<&E> {
-        self.find_in(
-            target,
-            |idx| idx-1 ,
-            |f| f.thing_or_prev(),
-            |f,v| f.first().collexate_ref().lt(v),
-            |idx| idx == 0,
-        )
+        if self.is_empty() { return None; }
+        self.find_in(target, false, |f, v| f.first().collexate_ref().lt(v))
     }
-    
-    
+
     pub fn find_le(&self, target: V) -> Option<&E> {
-        self.find_in(
-            target,
-            |idx| idx-1 ,
-            |f| f.thing_or_prev(),
-            |f,v| f.first().collexate_ref().le(v),
-            |idx| idx == 0,
-        )
+        if self.is_empty() { return None; }
+        self.find_in(target, false, |f, v| f.first().collexate_ref().le(v))
     }
-    
-    /// 找到最近的大于 target 的值
-    ///
+
     pub(crate) fn find_in(
         &self,
         target: V,
-        next: fn(usize) -> usize,
-        thing_idx: fn(&CollexField<E, V>) -> Option<Result<usize, usize>>,
+        is_forward: bool,
         cmp: fn(&FieldIn<E, V>, &V) -> bool,
-        is_edge: impl Fn(usize) -> bool,
     ) -> Option<&E> {
-        let t_idx =
-            if self.span().start().ge(&target) {
-                0
-            } else if self.span().end().map(|v|v.le(&target)).unwrap_or(false) {
-                self.len()-1
-            } else {
-                self.get_index(&target).ok()?
-            };
-        // 上面get_index内已经判空。
-        // 结果落在t位 -> t位的最大值(大于)t -> t位已经足够，进入t位
-        //           -> t位的最大值不(大于)t -> t+1位必然超过t位，进入下一位
-        // 结果落在非t位 -> 必然超过t位，进入此位
-        let f_idx = match thing_idx(&self.items[t_idx])? {
-            Ok(idx) => {
-                if cmp(&self.items[idx].as_thing().1, &target) {
-                    idx
-                } else {
-                    if is_edge(idx) {
-                        return None
-                    } else {
-                        next(idx)
-                    }
-                }
+        // 防御空集合导致的 len() - 1 下溢
+        if self.is_empty() { return None; }
+
+        let t_idx = if self.span().start().ge(&target) {
+            0
+        } else if self.span().end().map(|v| v.le(&target)).unwrap_or(false) {
+            self.len() - 1
+        } else {
+            self.get_index(&target).ok()?
+        };
+
+        // 确定起始的 Thing 索引（跳过填充物）
+        let mut curr_idx = if self.items[t_idx].is_thing() {
+            Some(t_idx)
+        } else if is_forward {
+            match self.items[t_idx] {
+                RawField::Next(n) | RawField::Among(_, n) => Some(n),
+                _ => None,
             }
-            Err(idx) => {
-                idx
+        } else {
+            match self.items[t_idx] {
+                RawField::Prev(p) | RawField::Among(p, _) => Some(p),
+                _ => None,
             }
         };
-        
-        // 必然是thing
-        match self.items[f_idx].as_thing().1 {
-            Field::Elem(e) => {Some(e)}
-            Field::Collex(collex) => {
-                collex.find_in(
-                    target,
-                    next,
-                    thing_idx,
-                    cmp,
-                    is_edge
-                )}
+
+        // 迭代查找，确保每次 as_thing() 都是安全的
+        while let Some(idx) = curr_idx {
+            let field = &self.items[idx].as_thing().1;
+            if cmp(field, &target) {
+                return match field {
+                    Field::Elem(e) => Some(e),
+                    Field::Collex(c) => c.__in(target, is_forward, cmp),
+                };
+            }
+
+            // 使用 O(1) 辅助方法移动到下一个/上一个 Thing
+            curr_idx = if is_forward {
+                self.next_thing_idx(idx)
+            } else {
+                self.prev_thing_idx(idx)
+            };
         }
+        None
     }
-    
-    /// 找到最近的
-    ///
-    /// 两边距离相等时返回更小的
+
+    // ===================== 修复 find_closest =====================
+
     pub fn find_closest(&self, target: V) -> Option<&E> {
         use RawField::*;
         use Field::*;
-        
-        let t_idx =
-            if self.span().start().ge(&target) {
-                0
-            } else if self.span().end().map(|v|v.le(&target)).unwrap_or(false) {
-                self.len()-1
-            } else {
-                self.get_index(&target).ok()?
-            };
-        // 上面get_index内已经判空。
-        // t位是thing -> t位属于t位 -> 是Collex则进入
-        //                        -> 是Elem返回其
-        //           -> t大于最大 -> t+1最小值与t最大值比较
-        //           -> t小于最小 -> t-1最大值与t最小值比较
-        // t位不是Thing -> 下一个最小值与上一个最大值比较
-        
+
+        if self.is_empty() { return None; } // 增加空检查
+
+        let t_idx = if self.span().start().ge(&target) {
+            0
+        } else if self.span().end().map(|v| v.le(&target)).unwrap_or(false) {
+            self.len() - 1
+        } else {
+            self.get_index(&target).ok()?
+        };
+
         match &self.items[t_idx] {
             Thing(field) => {
                 let first = field.1.first();
@@ -1087,47 +1079,36 @@ where
                         }
                     } else { // 大于最大
                         Some(
-                            if t_idx < self.len() {
-                                self.items.get(t_idx + 1)
-                                    .map(|v|
-                                        self.thing_dist_cmp_get(target, last,
-                                                                v.as_thing().1.first()
-                                        )
-                                    )
-                                    .unwrap_or(last)
-                            } else{
+                            if let Some(next_idx) = self.next_thing_idx(t_idx) {
+                                let next_first = self.items[next_idx].as_thing().1.first();
+                                self.thing_dist_cmp_get(target, last, next_first)
+                            } else {
                                 last
                             }
                         )
                     }
-                } else { // 小于最小
+                } else { // 小于最小，使用 prev_thing_idx 安全获取上一个 Thing
                     Some(
-                        if t_idx != 0 {
-                            self.items.get(t_idx-1)
-                                .map(|v|
-                                    self.thing_dist_cmp_get(target,
-                                                            v.as_thing().1.last(),
-                                                            first
-                                    )
-                                )
-                                .unwrap_or(first)
+                        if let Some(prev_idx) = self.prev_thing_idx(t_idx) {
+                            let prev_last = self.items[prev_idx].as_thing().1.last();
+                            self.thing_dist_cmp_get(target, prev_last, first)
                         } else {
                             first
                         }
                     )
                 }
-            } 
+            }
             Next(ans) => Some(&self.items[*ans].as_thing().1.first()),
             Prev(ans) => Some(&self.items[*ans].as_thing().1.last()),
-            Among(prev,next) => {
-                let prev = self.items[*prev].as_thing().1.last();
-                let next = self.items[*next].as_thing().1.first();
-                Some(self.thing_dist_cmp_get(target, prev, next))
+            Among(prev, next) => {
+                let prev_val = self.items[*prev].as_thing().1.last();
+                let next_val = self.items[*next].as_thing().1.first();
+                Some(self.thing_dist_cmp_get(target, prev_val, next_val))
             }
             Void => None,
         }
     }
-    
+
     pub(crate) fn thing_dist_cmp_get<'a>(&'a self, target:V, prev: &'a E, next: &'a E) -> &'a E{
         use std::cmp::Ordering::*;
         match dist_cmp(target, prev.collexate(), next.collexate()){
@@ -1532,7 +1513,7 @@ mod tests {
         assert_eq!(collex.find_closest(20), Some(&TestElem(15)));
         // 越界取边界
         assert_eq!(collex.find_closest(114514), Some(&TestElem(25)));
-        // 边界仅1值
+        // 边界仅 1 值
         assert_eq!(collex.find_closest(0), Some(&TestElem(5)));
         // 未分配时取边界
         assert_eq!(collex.find_closest(100), Some(&TestElem(25)));

@@ -187,6 +187,10 @@ pub enum RawField<V, IDX = usize> {
 }
 
 impl<V> RawField<V> {
+    pub fn is_thing(&self) -> bool {
+        matches!(self, RawField::Thing(_))
+    }
+
     pub fn as_thing(&self) -> (usize, &V) {
         match self {
             Self::Thing(t) => (t.0,&t.1),
