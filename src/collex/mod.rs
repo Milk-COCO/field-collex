@@ -679,4 +679,79 @@ where
         }
     }
 
+    /// 修改指定值的元素。
+    ///
+    /// 闭包可修改元素（包括其 `collexate()` 值）。若 collexate 值改变，
+    /// 元素将被移动到新位置。若新位置插入失败（重复/负数），返回错误并排出元素。
+    ///
+    /// ## 返回值
+    /// - `Ok(result)` — 修改成功，`result` 为闭包的返回值
+    /// - `Err(ModifyError::NotFound)` — 未找到目标元素
+    /// - `Err(ModifyError::InsertError(result, elem))` — 值改变后无法插入新位置
+    pub fn modify<F, R>(&mut self, value: &V, op: F) -> Result<R, ModifyError<R, E>>
+    where
+        F: FnOnce(&mut E) -> R
+    {
+        let mut elem = self.remove(value).map_err(|_| ModifyError::NotFound)?;
+        let old_val = *elem.collexate_ref();
+        let result = op(&mut elem);
+
+        if elem.collexate_ref().eq(&old_val) {
+            // 值未变，插回原位（必然成功）
+            self.insert(elem).ok();
+            Ok(result)
+        } else {
+            // 值改变，尝试插入新位置
+            match self.insert(elem) {
+                Ok(()) => Ok(result),
+                Err(e) => Err(ModifyError::InsertError(result, e)),
+            }
+        }
+    }
+
+    /// 尝试修改指定值的元素，插入新位置失败时自动回滚。
+    ///
+    /// 与 [`modify`](Self::modify) 不同，若 collexate 值改变但新位置插入失败，
+    /// 会自动恢复旧值并插回原位，保证集合一致性。
+    ///
+    /// ## 返回值
+    /// - `Ok(result)` — 修改成功
+    /// - `Err(())` — 未找到目标元素，或新值插入失败（已回滚）
+    pub fn try_modify<F, R>(&mut self, value: &V, op: F) -> Result<R, ()>
+    where
+        F: FnOnce(&mut E) -> R
+    {
+        let mut elem = self.remove(value).map_err(|_| ())?;
+        let old_val = *elem.collexate_ref();
+        let result = op(&mut elem);
+
+        if elem.collexate_ref().eq(&old_val) {
+            // 值未变，插回原位
+            self.insert(elem).ok();
+            Ok(result)
+        } else {
+            // 值改变，尝试插入新位置
+            match self.insert(elem) {
+                Ok(()) => Ok(result),
+                Err(mut rejected) => {
+                    // 回滚：恢复旧值，插回原位
+                    *rejected.collexate_mut() = old_val;
+                    self.insert(rejected).ok();
+                    Err(())
+                }
+            }
+        }
+    }
+
+}
+
+// ===================== ModifyError =====================
+
+/// [`Collex::modify`] 可能产生的错误。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModifyError<R, E> {
+    /// 未找到目标元素
+    NotFound,
+    /// 值改变后插入新位置失败（重复或负数），携带闭包结果和元素
+    InsertError(R, E),
 }

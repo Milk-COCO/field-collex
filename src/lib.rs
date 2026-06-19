@@ -72,7 +72,7 @@ use num_traits::{NumOps, Zero};
 pub mod collex;
 pub mod set;
 
-pub use collex::Collex;
+pub use collex::{Collex, ModifyError};
 pub use set::FieldSet;
 
 // ===================== Collexetable =====================

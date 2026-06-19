@@ -179,6 +179,26 @@ impl<V: FieldValue + ConstUnit> FieldSet<V> {
         }
         (accepted, rejected)
     }
+
+    /// 修改指定值的元素，值改变后若无法插入新位置则排出元素。
+    ///
+    /// 参见 [`Collex::modify`](crate::Collex::modify)。
+    pub fn modify<F, R>(&mut self, value: V, op: F) -> Result<R, crate::collex::ModifyError<R, SetElem<V>>>
+    where
+        F: FnOnce(&mut V) -> R
+    {
+        self.collex.modify(&value, |elem| op(&mut elem.0))
+    }
+
+    /// 尝试修改指定值的元素，失败时自动回滚。
+    ///
+    /// 参见 [`Collex::try_modify`](crate::Collex::try_modify)。
+    pub fn try_modify<F, R>(&mut self, value: V, op: F) -> Result<R, ()>
+    where
+        F: FnOnce(&mut V) -> R
+    {
+        self.collex.try_modify(&value, |elem| op(&mut elem.0))
+    }
 }
 
 // ===================== Default =====================
@@ -333,5 +353,85 @@ mod tests {
         assert!(set.insert(0).is_ok());
         assert!(!set.is_empty());
         assert_eq!(set.first(), Some(0));
+    }
+
+    #[test]
+    fn test_modify() {
+        let mut set = FieldSet::<u32>::new();
+        set.extend(vec![5, 25, 35, 45]);
+
+        assert_eq!(set.first(), Some(5));
+
+        // 值未修改
+        set.modify(5, |_| ()).unwrap();
+        assert_eq!(set.first(), Some(5));
+
+        // 修改值但仍在此位置（不改块）
+        set.modify(5, |v| *v = 1).unwrap();
+        assert_eq!(set.first(), Some(1));
+
+        // 修改值改变位置（向后移）
+        set.modify(1, |v| *v = 15).unwrap();
+        assert_eq!(set.first(), Some(15));
+
+        // 修改值改变位置（向后移）
+        set.modify(15, |v| *v = 26).unwrap();
+        assert_eq!(set.first(), Some(25));
+
+        // 改到最前面
+        set.modify(45, |v| *v = 0).unwrap();
+        assert_eq!(set.first(), Some(0));
+
+        // 新值冲突（重复），应弹出元素
+        let ans = set.modify(25, |v| *v = 26);
+        assert!(ans.is_err());
+        // 25 已被排出，26 还在
+        assert!(!set.contains(25));
+        assert!(set.contains(26));
+
+        // modify 未找到
+        let ans = set.modify::<_, ()>(100, |_| {});
+        assert!(ans.is_err());
+    }
+
+    #[test]
+    fn test_try_modify() {
+        let mut set = FieldSet::<u32>::new();
+        set.extend(vec![5, 25, 35]);
+
+        // 值未修改
+        set.try_modify(5, |_| ()).unwrap();
+        assert_eq!(set.first(), Some(5));
+
+        // 修改值改变位置
+        set.try_modify(5, |v| *v = 15).unwrap();
+        assert_eq!(set.first(), Some(15));
+        assert!(!set.contains(5));
+
+        // 新值冲突（重复），应回滚
+        let ans = set.try_modify(25, |v| *v = 35);
+        assert!(ans.is_err());
+        // 回滚后 25 仍在原位
+        assert!(set.contains(25));
+        assert!(set.contains(35));
+
+        // 尝试改到更大的值
+        let _ans = set.try_modify::<_, ()>(25, |v| *v = 999);
+        // 999 不在集合内且 >=0，insert 成功
+        assert!(set.contains(999));
+        assert!(!set.contains(25));
+    }
+
+    #[test]
+    fn test_try_modify_rollback() {
+        let mut set = FieldSet::<i32>::new();
+        set.extend(vec![5, 15, 25]);
+
+        // try_modify 改负数应回滚
+        let ans = set.try_modify::<_, ()>(5, |v| *v = -1);
+        assert!(ans.is_err());
+        assert!(set.contains(5));
+        assert!(!set.contains(-1));
+        assert_eq!(set.len(), 3);
     }
 }
