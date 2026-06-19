@@ -1,345 +1,337 @@
-use span_core::Span;
-use crate::*;
-use crate::collex::*;
+use crate::{Collexetable, ConstUnit, FieldValue};
+use crate::collex::Collex;
 
-type FieldIn<V> = Field<V,FieldSet<V>>;
-type SetField<V> = RawField<Field<V,FieldSet<V>>>;
+// ===================== SetElem =====================
 
-#[derive(serde::Serialize, serde::Deserialize)]
-#[derive(Debug, Clone)]
-#[serde(transparent)]
+/// [`FieldSet`] 内部使用的透明包装。
+///
+/// 使 `V` 自身实现 [`Collexetable<V>`]，从而可存入 [`Collex`]。
+/// `#[repr(transparent)]` 保证内存布局与 `V` 完全一致。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
-pub(crate) struct SetElem<V: FieldValue>(V);
+pub struct SetElem<V: FieldValue>(V);
 
-impl<V: FieldValue> Collexetable<V> for SetElem<V>
-{
+impl<V: FieldValue> Collexetable<V> for SetElem<V> {
     fn collexate(&self) -> V {
         self.0
     }
-    
     fn collexate_ref(&self) -> &V {
         &self.0
     }
-    
     fn collexate_mut(&mut self) -> &mut V {
         &mut self.0
     }
 }
 
-fn elem_to_v_vec<V: FieldValue>(vec: Vec<SetElem<V>>) -> Vec<V> {
-    let mut vec = std::mem::ManuallyDrop::new(vec);
-    
-    let ptr = vec.as_mut_ptr() as *mut V;
-    let len = vec.len();
-    let cap = vec.capacity();
-    unsafe {
-        Vec::from_raw_parts(ptr, len, cap)
-    }
-}
+// ===================== FieldSet =====================
 
-fn v_to_elem_vec<V: FieldValue>(vec: Vec<V>) -> Vec<SetElem<V>> {
-    let mut vec = std::mem::ManuallyDrop::new(vec);
-    
-    let ptr = vec.as_mut_ptr() as *mut SetElem<V>;
-    let len = vec.len();
-    let cap = vec.capacity();
-    unsafe {
-        Vec::from_raw_parts(ptr, len, cap)
-    }
-}
-
-type In<V> = FieldCollex<SetElem<V>,V>;
-
-/// 每个块可以存多个内容（通过递归结构实现）
-/// 非空块可为单个元素或一个FieldSet，以[`Field`]类型存储。
+/// 有序数值集合，内部基于 [`Collex`] 的轻量封装。
+///
+/// 省去手动实现 [`Collexetable`]，直接存储 `V` 类型值。
+/// 支持自动去重、负数过滤、多种范围查找和最邻近查找。
+///
+/// ## 示例
+/// ```ignore
+/// use field_collex::FieldSet;
+///
+/// let mut set = FieldSet::<u32>::new();
+/// set.insert(5).unwrap();
+/// set.insert(15).unwrap();
+/// set.insert(25).unwrap();
+///
+/// assert!(set.contains(15));
+/// assert_eq!(set.find_gt(10), Some(15));
+/// assert_eq!(set.find_closest(12), Some(15));
+/// assert_eq!(set.len(), 3);
+/// ```
 #[derive(Debug, Clone)]
-pub struct FieldSet<V: FieldValue>(In<V>);
+pub struct FieldSet<V: FieldValue + ConstUnit> {
+    collex: Collex<SetElem<V>, V>,
+}
 
-impl<V> FieldSet<V>
-where
-    V: FieldValue,
-{
-    pub fn new(span: Span<V>, unit: V) -> NewResult<Self,V>
-    {
-        Ok(Self(In::new(span, unit)?))
-    }
-    pub fn with_capacity(
-        span: Span<V>,
-        unit: V,
-        capacity: usize,
-    ) -> WithCapacityResult<Self,V>
-    {
-        Ok(Self(In::with_capacity(span, unit, capacity)?))
-    }
-    pub fn with_elements(
-        span: Span<V>,
-        unit: V,
-        other: Vec<V>,
-    ) -> WithElementsResult<Self,V>
-    {
-        let other = v_to_elem_vec(other); 
-        Ok(Self(In::with_elements(span, unit, other)?))
-    }
-    pub fn span(&self) -> &Span<V>
-    {
-        self.0.span()
-    }
-    
-    pub fn unit(&self) -> &V
-    {
-        self.0.unit()
-    }
-    
-    pub fn size(&self) -> Option<usize>
-    {
-        self.0.size()
-    }
-    
-    pub fn len(&self) -> usize
-    {
-        self.0.len()
-    }
-    pub fn capacity(&self) -> usize
-    {
-        self.0.capacity()
-    }
-    
-    pub fn contains(&self, value: V) -> bool
-    {
-        self.0.contains_value(value)
-    }
-    
-    pub fn first(&self) -> Option<V>
-    {
-        self.0.first().map(|r|r.0)
-    }
-    
-    pub fn last(&self) -> Option<V>
-    {
-        self.0.last().map(|r|r.0)
-    }
-    pub fn extend(&mut self, vec: Vec<V>)
-    {
-        let vec = v_to_elem_vec(vec); 
-        self.0.extend(vec)
-    }
-    
-    pub fn try_extend(&mut self, vec: Vec<V>) -> TryExtendResult<V> 
-    {
-        let vec = v_to_elem_vec(vec); 
-        let ans = self.0.try_extend(vec);
-        TryExtendResult {
-            out_of_span: elem_to_v_vec(ans.out_of_span),
-            already_exist: elem_to_v_vec(ans.already_exist),
+impl<V: FieldValue + ConstUnit> FieldSet<V> {
+    /// 构造一个空集合。
+    pub fn new() -> Self {
+        Self {
+            collex: Collex::new(),
         }
     }
-    pub fn insert(&mut self, value: V) -> InsertResult<V>
-    {
-        let ans = self.0.insert(SetElem(value));
-        
-        ans.map_err(|e| match e {
-            InsertFieldCollexError::OutOfSpan(elem) => InsertFieldCollexError::OutOfSpan(elem.0),
-            InsertFieldCollexError::AlreadyExist(elem) => InsertFieldCollexError::AlreadyExist(elem.0),
-        })
+
+    /// 从 `Vec` 批量构造，自动去重并忽略负数。
+    pub fn with_elements(other: Vec<V>) -> Self {
+        let mut set = Self::new();
+        for v in other {
+            let _ = set.insert(v);
+        }
+        set
     }
-    pub fn remove(&mut self, target: V) -> RemoveResult<V>
-    {
-        let ans = self.0.remove(target);
-        
-        ans.map(|elem| elem.0)
+
+    /// 判断是否包含指定值。
+    pub fn contains(&self, value: V) -> bool {
+        self.collex.contains(&value)
     }
-    pub fn find_gt(&self, target: V) -> Option<V>
-    {
-        let ans = self.0.find_gt(target);
-        ans.map(|elem| elem.0)
+
+    /// 返回最小元素。
+    ///
+    /// 集合为空时返回 `None`。
+    pub fn first(&self) -> Option<V> {
+        self.collex.first().map(|e| e.0)
     }
-    
-    pub fn find_ge(&self, target: V) -> Option<V>
-    {
-        let ans = self.0.find_ge(target);
-        ans.map(|elem| elem.0)
+
+    /// 返回最大元素。
+    ///
+    /// 集合为空时返回 `None`。
+    pub fn last(&self) -> Option<V> {
+        self.collex.last().map(|e| e.0)
     }
-    
-    pub fn find_lt(&self, target: V) -> Option<V>
-    {
-        let ans = self.0.find_lt(target);
-        ans.map(|elem| elem.0)
+
+    /// 插入一个值。
+    ///
+    /// ## 返回值
+    /// - `Ok(())` — 插入成功
+    /// - `Err(value)` — 值已存在或为负数
+    pub fn insert(&mut self, value: V) -> Result<(), V> {
+        self.collex.insert(SetElem(value)).map_err(|e| e.0)
     }
-    
-    pub fn find_le(&self, target: V) -> Option<V>
-    {
-        let ans = self.0.find_le(target);
-        ans.map(|elem| elem.0)
+
+    /// 删除指定值。
+    ///
+    /// ## 返回值
+    /// - `Ok(value)` — 删除成功
+    /// - `Err(())` — 值不存在
+    pub fn remove(&mut self, value: V) -> Result<V, ()> {
+        self.collex.remove(&value).map(|e| e.0)
     }
-    
+
+    /// 查找第一个 `> target` 的元素。
+    pub fn find_gt(&self, target: V) -> Option<V> {
+        self.collex.find_gt(&target).map(|e| e.0)
+    }
+
+    /// 查找第一个 `>= target` 的元素。
+    pub fn find_ge(&self, target: V) -> Option<V> {
+        self.collex.find_ge(&target).map(|e| e.0)
+    }
+
+    /// 查找最后一个 `< target` 的元素。
+    pub fn find_lt(&self, target: V) -> Option<V> {
+        self.collex.find_lt(&target).map(|e| e.0)
+    }
+
+    /// 查找最后一个 `<= target` 的元素。
+    pub fn find_le(&self, target: V) -> Option<V> {
+        self.collex.find_le(&target).map(|e| e.0)
+    }
+
+    /// 查找距离 `target` 最近的值。
+    ///
+    /// 优先返回精确匹配；等距时取较小值。
     pub fn find_closest(&self, target: V) -> Option<V> {
-        let ans = self.0.find_closest(target);
-        ans.map(|elem| elem.0)
+        let le = self.find_le(target);
+        let ge = self.find_ge(target);
+        match (le, ge) {
+            (Some(l), Some(g)) => {
+                if target - l <= g - target {
+                    Some(l)
+                } else {
+                    Some(g)
+                }
+            }
+            (Some(l), None) => Some(l),
+            (None, Some(g)) => Some(g),
+            (None, None) => None,
+        }
     }
-    
+
+    /// 返回元素总数。
+    pub fn len(&self) -> usize {
+        self.collex.len()
+    }
+
+    /// 判断集合是否为空。
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.collex.is_empty()
+    }
+
+    /// 返回不可变迭代器，按值升序遍历。
+    pub fn iter(&self) -> impl Iterator<Item = V> + '_ {
+        self.collex.iter().map(|e| e.0)
+    }
+
+    /// 批量插入，自动忽略重复和负数。
+    pub fn extend(&mut self, vec: Vec<V>) {
+        for v in vec {
+            let _ = self.insert(v);
+        }
+    }
+
+    /// 批量插入并返回详细结果。
+    ///
+    /// 返回 `(成功插入的值列表, 被拒绝的值列表)`。
+    pub fn try_extend(&mut self, vec: Vec<V>) -> (Vec<V>, Vec<V>) {
+        let mut accepted = Vec::with_capacity(vec.len());
+        let mut rejected = Vec::new();
+        for v in vec {
+            match self.insert(v) {
+                Ok(()) => accepted.push(v),
+                Err(e) => rejected.push(e),
+            }
+        }
+        (accepted, rejected)
     }
 }
+
+// ===================== Default =====================
+
+impl<V: FieldValue + ConstUnit> Default for FieldSet<V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ===================== IntoIterator =====================
+
+impl<V: FieldValue + ConstUnit> IntoIterator for FieldSet<V> {
+    type Item = V;
+    type IntoIter = std::iter::Map<
+        crate::collex::iter::IntoIter<SetElem<V>, V>,
+        fn(SetElem<V>) -> V,
+    >;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.collex.into_iter().map(|e| e.0)
+    }
+}
+
+// ===================== 测试 =====================
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use span_core::Span;
-    
-    // ===================== Pub 方法测试用例 =====================
+
     #[test]
     fn test_basic_construction() {
-        // 测试：new / with_capacity / with_elements / span / unit / size / len / capacity / is_empty
-        let finite_span = Span::new_finite(0u32, 100u32);
-        let unit = 10u32;
-        
-        // 1. new 方法（正常场景）
-        let set = FieldSet::<u32>::new(finite_span.clone(), unit).unwrap();
-        assert_eq!(set.span(), &finite_span);
-        assert_eq!(*set.unit(), unit);
-        assert_eq!(set.size(), Some(10)); // 100/10=10 块
-        assert_eq!(set.len(), 0);
-        assert_eq!(set.capacity(), 0);
+        let set = FieldSet::<u32>::new();
         assert!(set.is_empty());
-        
-        // 2. new 方法（错误场景：unit=0）
-        let err_unit_zero = FieldSet::<u32>::new(finite_span.clone(), 0u32).unwrap_err();
-        assert!(matches!(err_unit_zero, NewFieldCollexError::NonPositiveUnit(_, 0)));
-        
-        // 3. new 方法（错误场景：空 span）
-        let empty_span = Span::new_finite(5u32, 3u32); // start >= end 为空
-        let err_empty_span = FieldSet::<u32>::new(empty_span, unit).unwrap_err();
-        assert!(matches!(err_empty_span, NewFieldCollexError::EmptySpan(_, _)));
-        
-        // 4. with_capacity 方法（正常场景）
-        let set_with_cap = FieldSet::<u32>::with_capacity(finite_span, unit, 5).unwrap();
-        assert_eq!(set_with_cap.capacity(), 5);
-        assert!(set_with_cap.is_empty());
-        
-        // 5. with_capacity 方法（错误场景：capacity 超限）
-        let err_cap_out = FieldSet::<u32>::with_capacity(Span::new_finite(0u32, 100u32), 10u32, 11).unwrap_err();
-        assert!(matches!(err_cap_out, WithCapacityFieldCollexError::OutOfSize(_, _)));
+        assert_eq!(set.len(), 0);
+
+        // with_elements
+        let set = FieldSet::with_elements(vec![5, 15, 25]);
+        assert_eq!(set.len(), 3);
+        assert_eq!(set.first(), Some(5));
+        assert_eq!(set.last(), Some(25));
     }
-    
+
     #[test]
     fn test_insert_contains() {
-        // 测试：insert / contains / first / last
-        let span = Span::new_finite(0u32, 100u32);
-        let unit = 10u32;
-        let mut set = FieldSet::<u32>::new(span, unit).unwrap();
-        
-        // 插入元素（直接传入 u32，无需包装）
-        let val1 = 5u32;
-        let val2 = 15u32;
-        assert!(set.insert(val1).is_ok());
-        assert!(set.insert(val2).is_ok());
-        
-        // 验证包含性
-        assert!(set.contains(val1));
-        assert!(set.contains(val2));
-        assert!(!set.contains(25u32));
-        
-        // 验证首尾元素
-        assert_eq!(set.first(), Some(val1));
-        assert_eq!(set.last(), Some(val2));
-        
-        // 验证非空
+        let mut set = FieldSet::<u32>::new();
+
+        assert!(set.insert(5).is_ok());
+        assert!(set.insert(15).is_ok());
+
+        assert!(set.contains(5));
+        assert!(set.contains(15));
+        assert!(!set.contains(25));
+
+        assert_eq!(set.first(), Some(5));
+        assert_eq!(set.last(), Some(15));
         assert!(!set.is_empty());
     }
-    
+
     #[test]
     fn test_remove() {
-        // 测试：remove
-        let span = Span::new_finite(0u32, 100u32);
-        let unit = 10u32;
-        let mut set = FieldSet::<u32>::new(span, unit).unwrap();
-        
-        // 插入后删除
-        let val = 5u32;
-        set.insert(val).unwrap();
-        let removed = set.remove(val).unwrap();
-        assert_eq!(removed, val);
-        
-        // 验证删除后不包含
-        assert!(!set.contains(val));
+        let mut set = FieldSet::<u32>::new();
+        set.insert(5).unwrap();
+
+        let removed = set.remove(5).unwrap();
+        assert_eq!(removed, 5);
+        assert!(!set.contains(5));
         assert!(set.is_empty());
-        
-        // 错误场景：删除不存在的值
-        let err_remove = set.remove(10u32).unwrap_err();
-        assert!(matches!(err_remove, RemoveFieldCollexError::NotExist));
+
+        // 删除不存在的值
+        assert!(set.remove(10).is_err());
     }
-    
+
     #[test]
     fn test_extend_try_extend() {
-        // 测试：extend / try_extend
-        let span = Span::new_finite(0u32, 100u32);
-        let unit = 10u32;
-        let mut set = FieldSet::<u32>::new(span, unit).unwrap();
-        
-        // 1. extend：批量插入（直接传入 Vec<u32>）
-        let vals = vec![5u32, 15u32, 25u32];
-        set.extend(vals.clone());
-        assert!(set.contains(5u32));
-        assert!(set.contains(15u32));
-        
-        // 2. try_extend：批量插入并返回结果
-        let vals2 = vec![25u32, 35u32, 105u32]; // 105 超出 span 范围
-        let result = set.try_extend(vals2);
-        // 验证：105 超出 span，25 已存在，35 插入成功
-        assert!(!result.out_of_span.is_empty() && result.out_of_span[0] == 105);
-        assert!(!result.already_exist.is_empty() && result.already_exist[0] == 25);
-        assert!(set.contains(35u32));
+        let mut set = FieldSet::<u32>::new();
+
+        // extend
+        set.extend(vec![5, 15, 25]);
+        assert!(set.contains(5));
+        assert!(set.contains(15));
+        assert_eq!(set.len(), 3);
+
+        // try_extend
+        let (accepted, rejected) = set.try_extend(vec![25, 35]);
+        assert_eq!(accepted, vec![35]); // 25 重复被拒绝
+        assert_eq!(rejected, vec![25]);
+        assert!(set.contains(35));
+        assert_eq!(set.len(), 4);
     }
-    
+
     #[test]
     fn test_find_methods() {
-        // 测试：find_gt / find_ge / find_lt / find_le
-        let span = Span::new_finite(0u32, 100u32);
-        let unit = 10u32;
-        let mut set = FieldSet::<u32>::new(span, unit).unwrap();
-        
-        // 插入测试元素
-        let vals = [5u32, 15u32, 25u32];
-        for &v in &vals {
+        let mut set = FieldSet::<u32>::new();
+        for v in [5u32, 15, 25] {
             set.insert(v).unwrap();
         }
-        
-        // 测试 find_gt（大于）
-        let gt = set.find_gt(10u32).unwrap();
-        assert_eq!(gt, 15u32);
-        
-        // 测试 find_ge（大于等于）
-        let ge = set.find_ge(15u32).unwrap();
-        assert_eq!(ge, 15u32);
-        
-        // 测试 find_lt（小于）
-        let lt = set.find_lt(20u32).unwrap();
-        assert_eq!(lt, 15u32);
-        
-        // 测试 find_le（小于等于）
-        let le = set.find_le(25u32).unwrap();
-        assert_eq!(le, 25u32);
-        
-        // 错误场景：找不到匹配值
-        let err_find = set.find_gt(30u32);
-        assert!(matches!(err_find, None));
+
+        assert_eq!(set.find_gt(10), Some(15));
+        assert_eq!(set.find_ge(15), Some(15));
+        assert_eq!(set.find_lt(20), Some(15));
+        assert_eq!(set.find_le(25), Some(25));
+        assert_eq!(set.find_gt(30), None);
     }
-    
+
     #[test]
-    fn test_with_elements() {
-        // 测试：with_elements（批量构造）
-        let span = Span::new_finite(0u32, 100u32);
-        let unit = 10u32;
-        let vals = vec![5u32, 15u32, 25u32, 105u32]; // 105 超出 span
-        
-        // 构造 FieldSet（直接传入 Vec<u32>）
-        let set = FieldSet::<u32>::with_elements(span, unit, vals).unwrap();
-        // 验证：105 被忽略，5/15/25 插入成功
-        assert!(set.contains(5u32));
-        assert!(set.contains(15u32));
-        assert!(!set.contains(105u32));
-        assert_eq!(set.first(), Some(5u32));
-        assert_eq!(set.last(), Some(25u32));
+    fn test_find_closest() {
+        let mut set = FieldSet::<u32>::new();
+        for v in [5u32, 15, 25] {
+            set.insert(v).unwrap();
+        }
+
+        // 精确匹配
+        assert_eq!(set.find_closest(5), Some(5));
+        assert_eq!(set.find_closest(25), Some(25));
+
+        // 等距取小
+        assert_eq!(set.find_closest(10), Some(5));
+        assert_eq!(set.find_closest(20), Some(15));
+
+        // 边界
+        assert_eq!(set.find_closest(0), Some(5));
+        assert_eq!(set.find_closest(100), Some(25));
+    }
+
+    #[test]
+    fn test_iter() {
+        let mut set = FieldSet::<u32>::new();
+        set.extend(vec![5, 15, 25]);
+
+        let collected: Vec<_> = set.iter().collect();
+        assert_eq!(collected, vec![5, 15, 25]);
+
+        // IntoIterator（消耗所有权）
+        let collected: Vec<_> = set.into_iter().collect();
+        assert_eq!(collected, vec![5, 15, 25]);
+    }
+
+    #[test]
+    fn test_duplicate() {
+        let mut set = FieldSet::<u32>::new();
+        assert!(set.insert(5).is_ok());
+        assert!(set.insert(5).is_err()); // 重复
+        assert_eq!(set.len(), 1);
+    }
+
+    #[test]
+    fn test_negative_ignored() {
+        // 负数应被拒绝
+        let mut set = FieldSet::<i32>::new();
+        assert!(set.insert(-1).is_err());
+        assert!(set.insert(0).is_ok());
+        assert!(!set.is_empty());
+        assert_eq!(set.first(), Some(0));
     }
 }

@@ -1,27 +1,26 @@
-use crate::collex::CollexField;
-use crate::{Collexetable, Field, FieldCollex, FieldValue, RawField};
+use super::{Collex, Slot, ValueCount};
+use crate::{Collexetable, FieldValue};
+use std::marker::PhantomData;
 
-// ========== 无 dyn 动态分发的不可变迭代器 ==========
-/// 递归迭代栈的元素类型（静态类型，无动态分发）
-enum IterStackItem<'a, E, V>
-where
-    E: Collexetable<V>,
-    V: FieldValue,
-{
-    // 外层 items 的迭代器
-    Outer(std::slice::Iter<'a, CollexField<E, V>>),
-    // 子 Collex 的迭代器
-    Inner(Iter<'a, E, V>),
-}
+// ===================== Iter =====================
 
-/// `FieldCollex` 的不可变迭代器（纯静态类型，无 dyn）
+/// [`Collex`] 的不可变引用迭代器。
+///
+/// 按槽位顺序线性扫描所有非空 `Slot` 中的元素，槽内 `Many` 块按升序逐个产出。
+/// 时间复杂度：平摊 O(1) 每元素。
 pub struct Iter<'a, E, V>
 where
     E: Collexetable<V>,
     V: FieldValue,
 {
-    // 静态类型的迭代栈（替代 dyn 动态分发）
-    stack: Vec<IterStackItem<'a, E, V>>,
+    /// 所有槽位的切片
+    items: &'a [Slot<E>],
+    /// 当前槽位索引
+    slot_idx: usize,
+    /// 当前 Many 中的元素索引（仅当正在遍历 Many 时有效）
+    many_idx: usize,
+    /// 类型标记
+    _phantom: PhantomData<V>,
 }
 
 impl<'a, E, V> Iter<'a, E, V>
@@ -29,103 +28,73 @@ where
     E: Collexetable<V>,
     V: FieldValue,
 {
-    /// 构造引用迭代器（内部调用）
-    pub(crate) fn new(collex: &'a FieldCollex<E, V>) -> Self {
+    /// 从 Collex 创建迭代器（内部使用）
+    pub(crate) fn new(collex: &'a Collex<E, V>) -> Self {
         Self {
-            stack: vec![IterStackItem::Outer(collex.items.iter())],
+            items: &collex.items,
+            slot_idx: 0,
+            many_idx: 0,
+            _phantom: PhantomData,
         }
     }
 }
 
-
-impl<E, V> FieldCollex<E, V>
-where
-    E: Collexetable<V>,
-    V: FieldValue,
-{
-    /// 获取不可变迭代器
-    pub fn iter(&self) -> Iter<'_, E, V> {
-        Iter {
-            stack: vec![IterStackItem::Outer(self.items.iter())],
-        }
-    }
-}
-
-// ========== 纯静态类型的 Iterator trait 实现 ==========
 impl<'a, E, V> Iterator for Iter<'a, E, V>
 where
     E: Collexetable<V>,
     V: FieldValue,
 {
     type Item = &'a E;
-    
+
     fn next(&mut self) -> Option<Self::Item> {
-        // 从栈顶取出迭代器处理（栈式递归）
-        while let Some(mut iter_item) = self.stack.pop() {
-            match &mut iter_item {
-                // 处理外层 items 迭代器
-                IterStackItem::Outer(outer_iter) => {
-                    while let Some(field) = outer_iter.next() {
-                        match field {
-                            RawField::Thing((_, field)) => match field {
-                                // 单个元素，直接返回
-                                Field::Elem(e) => {
-                                    // 把当前外层迭代器放回栈（后续继续处理）
-                                    self.stack.push(iter_item);
-                                    return Some(e);
-                                }
-                                // 子 Collex，创建子迭代器并压入栈（优先处理子迭代器）
-                                Field::Collex(collex) => {
-                                    // 先把当前外层迭代器放回栈
-                                    self.stack.push(iter_item);
-                                    // 把子 Collex 迭代器压入栈（栈顶优先处理）
-                                    self.stack.push(IterStackItem::Inner(collex.iter()));
-                                    // 重新进入循环，处理子迭代器
-                                    break;
-                                }
-                            },
-                            // 空块，跳过
-                            _ => continue,
-                        }
-                    }
-                    // 外层迭代器处理完，无需放回栈
+        loop {
+            let slot = self.items.get(self.slot_idx)?;
+            match &slot.values {
+                ValueCount::Nope => {
+                    self.slot_idx += 1;
+                    // 继续下一个槽
                 }
-                // 处理子 Collex 迭代器
-                IterStackItem::Inner(inner_iter) => {
-                    if let Some(item) = inner_iter.next() {
-                        // 子迭代器未处理完，放回栈
-                        self.stack.push(iter_item);
-                        return Some(item);
+                ValueCount::One(v) => {
+                    self.slot_idx += 1;
+                    return Some(v);
+                }
+                ValueCount::Many(vec) => {
+                    if self.many_idx < vec.len() {
+                        let elem = &vec[self.many_idx];
+                        self.many_idx += 1;
+                        return Some(elem);
                     }
-                    // 子迭代器处理完，无需放回栈
+                    // Many 耗尽，移到下一个槽
+                    self.slot_idx += 1;
+                    self.many_idx = 0;
                 }
             }
         }
-        
-        // 所有迭代器处理完毕
-        None
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // 粗略估计：剩余槽位数 到 剩余槽位数 * 64（宽松上限）
+        let remaining_slots = self.items.len().saturating_sub(self.slot_idx);
+        (0, Some(remaining_slots * 64))
     }
 }
 
-#[derive(Debug)]
-pub enum IntoIterStackItem<E, V>
-where
-    E: Collexetable<V>,
-    V: FieldValue,
-{
-    // 持有 vec::IntoIter 所有权（消耗型，不可克隆）
-    Outer(std::vec::IntoIter<CollexField<E, V>>),
-    // 持有子 Collex 的 IntoIter 所有权
-    Inner(IntoIter<E, V>),
-}
+// ===================== IntoIter =====================
 
-#[derive(Debug)]
+/// [`Collex`] 的所有权转移迭代器。
+///
+/// 消耗 `Collex`，按升序依次产出所有元素。逻辑与 `Iter` 一致，零额外分配。
 pub struct IntoIter<E, V>
 where
     E: Collexetable<V>,
     V: FieldValue,
 {
-    stack: Vec<IntoIterStackItem<E, V>>,
+    /// 外层槽位迭代器（消耗所有权）
+    items: std::vec::IntoIter<Slot<E>>,
+    /// 当前 Many 中的元素迭代器
+    current: std::vec::IntoIter<E>,
+    /// 类型标记
+    _phantom: PhantomData<V>,
 }
 
 impl<E, V> IntoIter<E, V>
@@ -133,140 +102,217 @@ where
     E: Collexetable<V>,
     V: FieldValue,
 {
-    pub(crate) fn new(collex: FieldCollex<E, V>) -> Self {
-        // 转移 items 所有权到 vec::IntoIter（消耗原 FieldCollex 的 items）
-        let outer_iter = collex.items.into_iter();
+    /// 从 Collex 创建所有权迭代器（内部使用）
+    pub(crate) fn new(collex: Collex<E, V>) -> Self {
         Self {
-            stack: vec![IntoIterStackItem::Outer(outer_iter)],
+            items: collex.items.into_iter(),
+            current: Vec::new().into_iter(),
+            _phantom: PhantomData,
         }
     }
 }
 
-// 核心修复：无克隆、真正消耗所有权的 Iterator 实现
 impl<E, V> Iterator for IntoIter<E, V>
 where
     E: Collexetable<V>,
     V: FieldValue,
 {
     type Item = E;
-    
+
     fn next(&mut self) -> Option<Self::Item> {
-        // 循环处理栈顶迭代器（所有权转移）
-        while let Some(mut iter_item) = self.stack.pop() {
-            match &mut iter_item {
-                IntoIterStackItem::Outer(outer_iter) => {
-                    // 遍历外层迭代器（消耗式）
-                    while let Some(field) = outer_iter.next() {
-                        match field {
-                            RawField::Thing((_, field_in)) => match field_in {
-                                // 匹配到元素：直接返回所有权，同时把剩余迭代器放回栈
-                                Field::Elem(e) => {
-                                    // 把「剩余未处理的外层迭代器」放回栈（无克隆，转移剩余所有权）
-                                    self.stack.push(IntoIterStackItem::Outer(std::mem::take(outer_iter)));
-                                    return Some(e);
-                                }
-                                // 匹配到子 Collex：转移子 Collex 所有权，创建子迭代器压栈
-                                Field::Collex(collex) => {
-                                    // 1. 把当前剩余的外层迭代器放回栈
-                                    self.stack.push(IntoIterStackItem::Outer(std::mem::take(outer_iter)));
-                                    // 2. 把子 Collex 迭代器压入栈（优先处理子迭代器）
-                                    self.stack.push(IntoIterStackItem::Inner(IntoIter::new(collex)));
-                                    // 跳出当前循环，处理子迭代器
-                                    break;
-                                }
-                            },
-                            // 空块：跳过，继续遍历外层迭代器
-                            RawField::Prev(_) | RawField::Among(_, _) | RawField::Next(_) | RawField::Void => continue,
-                        }
-                    }
-                    // 外层迭代器已耗尽，无需放回栈
+        // 先尝试从当前 Many 迭代器中取元素
+        if let Some(elem) = self.current.next() {
+            return Some(elem);
+        }
+
+        // 当前 Many 耗尽，取下一个 Slot
+        loop {
+            let slot = self.items.next()?;
+            match slot.values {
+                ValueCount::Nope => {
+                    // 空槽，继续
                 }
-                IntoIterStackItem::Inner(inner_iter) => {
-                    // 处理子迭代器（消耗式）
-                    if let Some(item) = inner_iter.next() {
-                        // 子迭代器未耗尽，放回栈继续处理
-                        self.stack.push(iter_item);
-                        return Some(item);
+                ValueCount::One(e) => {
+                    return Some(e);
+                }
+                ValueCount::Many(vec) => {
+                    self.current = vec.into_iter();
+                    // 尝试从新 Many 中取第一个元素
+                    if let Some(elem) = self.current.next() {
+                        return Some(elem);
                     }
-                    // 子迭代器已耗尽，无需放回栈
+                    // 空 vec，继续下一个槽
                 }
             }
         }
-        // 所有迭代器处理完毕
-        None
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining_slots = self.items.len();
+        let current_remaining = self.current.len();
+        (current_remaining, Some(remaining_slots * 64 + current_remaining))
     }
 }
 
-/// FieldCollex 所有权转移的 IntoIterator 实现（核心：消耗 self）
-impl<E, V> IntoIterator for FieldCollex<E, V>
-where
-    E: Collexetable<V>,
-    V: FieldValue,
-{
-    type Item = E;
-    type IntoIter = IntoIter<E, V>;
-    
-    fn into_iter(self) -> Self::IntoIter {
-        IntoIter::new(self)
-    }
-}
+// ===================== IntoIterator =====================
 
-impl<'a, E, V> IntoIterator for &'a FieldCollex<E, V>
+impl<'a, E, V> IntoIterator for &'a Collex<E, V>
 where
     E: Collexetable<V>,
     V: FieldValue,
 {
     type Item = &'a E;
     type IntoIter = Iter<'a, E, V>;
-    
+
     fn into_iter(self) -> Self::IntoIter {
         Iter::new(self)
     }
 }
 
+impl<E, V> IntoIterator for Collex<E, V>
+where
+    E: Collexetable<V>,
+    V: FieldValue,
+{
+    type Item = E;
+    type IntoIter = IntoIter<E, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter::new(self)
+    }
+}
+
+// ===================== 便捷方法 =====================
+
+impl<E, V> Collex<E, V>
+where
+    E: Collexetable<V>,
+    V: FieldValue,
+{
+    /// 返回不可变迭代器，按 `collexate()` 值升序遍历所有元素。
+    pub fn iter(&self) -> Iter<'_, E, V> {
+        Iter::new(self)
+    }
+
+    /// 返回集合中元素的总数。
+    ///
+    /// 时间复杂度 O(槽位数)，遍历所有槽累加。
+    pub fn len(&self) -> usize {
+        self.items
+            .iter()
+            .map(|slot| match &slot.values {
+                ValueCount::Nope => 0,
+                ValueCount::One(_) => 1,
+                ValueCount::Many(vec) => vec.len(),
+            })
+            .sum()
+    }
+
+    /// 判断集合是否为空。
+    ///
+    /// 时间复杂度 O(1)。
+    pub fn is_empty(&self) -> bool {
+        self.first_nonempty_index().is_none()
+    }
+}
+
+// ===================== 测试 =====================
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use span_core::Span;
-    
-    // ===================== 测试用元素类型（实现Collexetable<u32>） =====================
-    #[derive(Debug, PartialEq, Eq, Ord, PartialOrd)]
-    #[derive(Clone)]
-struct TestElem(u32);
-    
+    use crate::Collexetable;
+
+    // 测试用元素类型
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
+    struct TestElem(u32);
+
     impl Collexetable<u32> for TestElem {
         fn collexate(&self) -> u32 {
             self.0
         }
-        
         fn collexate_ref(&self) -> &u32 {
             &self.0
         }
-        
         fn collexate_mut(&mut self) -> &mut u32 {
             &mut self.0
         }
     }
+
     #[test]
     fn test_iter() {
-        let span = Span::new_finite(0u32, 100u32);
-        let unit = 20u32;
-        let elems = vec![TestElem(5), TestElem(15), TestElem(25), TestElem(55)];
-        let collex = FieldCollex::<TestElem, u32>::with_elements(span, unit, elems).unwrap();
-        
+        let mut collex = Collex::<TestElem, u32>::new();
+        collex.insert(TestElem(5)).unwrap();
+        collex.insert(TestElem(15)).unwrap();
+        collex.insert(TestElem(25)).unwrap();
+        collex.insert(TestElem(55)).unwrap();
+
         // 遍历验证顺序和内容
         let collected: Vec<_> = collex.iter().cloned().collect();
-        assert_eq!(collected, vec![TestElem(5), TestElem(15), TestElem(25), TestElem(55)]);
-        
+        assert_eq!(
+            collected,
+            vec![TestElem(5), TestElem(15), TestElem(25), TestElem(55)]
+        );
+
         // for 循环遍历（IntoIterator）
         let mut values = Vec::new();
         for elem in &collex {
             values.push(elem.0);
         }
         assert_eq!(values, vec![5, 15, 25, 55]);
-        
+
         // 空集合迭代器
-        let empty_collex = FieldCollex::<TestElem, u32>::new(Span::new_finite(0u32, 100u32), 10u32).unwrap();
+        let empty_collex = Collex::<TestElem, u32>::new();
         assert!(empty_collex.iter().next().is_none());
+    }
+
+    #[test]
+    fn test_into_iter() {
+        let mut collex = Collex::<TestElem, u32>::new();
+        collex.insert(TestElem(10)).unwrap();
+        collex.insert(TestElem(20)).unwrap();
+        collex.insert(TestElem(30)).unwrap();
+
+        // 所有权转移迭代
+        let collected: Vec<_> = collex.into_iter().collect();
+        assert_eq!(
+            collected,
+            vec![TestElem(10), TestElem(20), TestElem(30)]
+        );
+    }
+
+    #[test]
+    fn test_len_is_empty() {
+        let mut collex = Collex::<TestElem, u32>::new();
+        assert!(collex.is_empty());
+        assert_eq!(collex.len(), 0);
+
+        collex.insert(TestElem(5)).unwrap();
+        assert!(!collex.is_empty());
+        assert_eq!(collex.len(), 1);
+
+        collex.insert(TestElem(15)).unwrap();
+        assert_eq!(collex.len(), 2);
+
+        collex.remove(&5).unwrap();
+        assert_eq!(collex.len(), 1);
+
+        collex.remove(&15).unwrap();
+        assert!(collex.is_empty());
+        assert_eq!(collex.len(), 0);
+    }
+
+    #[test]
+    fn test_iter_skip_empty_slots() {
+        // 测试跳槽插入导致的空槽不会被迭代器遍历到
+        let mut collex = Collex::<TestElem, u32>::new();
+        // 插入跨度大的元素，中间会留空槽
+        collex.insert(TestElem(100)).unwrap();
+        collex.insert(TestElem(5)).unwrap();
+
+        // 迭代器只应返回非空元素，按值升序（5, 100）
+        let collected: Vec<_> = collex.iter().map(|e| e.0).collect();
+        assert_eq!(collected, vec![5, 100]);
+        assert_eq!(collex.len(), 2);
     }
 }

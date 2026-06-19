@@ -1,75 +1,69 @@
 //! # field-collex
 //!
-//! 基于**递归分块思想**构造的集合库，致力于给需要有序集合中的大量最值查询的场景提供O(1)方案
-//! A Rust collection library based on the **recursive block-based idea**, aimed to providing an O(1) solution for scenarios requiring extensive extremum queries in an ordered set
+//! 基于**分块槽位思想**构造的集合库，专为需要有序集合中大量最值查询的场景提供 O(1) 方案。
+//! A Rust collection library based on the **block-slot idea**, providing O(1) extremum
+//! queries for scenarios requiring frequent ordered-set lookups.
+//!
+//! ## 核心结构 / Core Types
+//!
+//! | 类型 | 说明 |
+//! |------|------|
+//! | [`Collex<E, V>`] | 通用有序集合，元素 E 通过 [`Collexetable`] 提取其数值 V 进行排序 |
+//! | [`FieldSet<V>`] | `Collex` 的轻量封装，直接存储 `V`，省去手动实现 `Collexetable` |
 //!
 //! ## 核心 Trait / Core Traits
-//!   - `Collexetable<V>`：定义「可被 `FieldCollex` 集合管理的元素」的核心行为（提取数值、比较、去重）
-//!     `Collexetable<V>`：Define the core behavior of "elements that can be managed by `FieldCollex`" (extracting values, comparing, deduplicating)；
-//!   - `FieldValue`：约束数值类型的核心能力（零值、单位值、数值转换）
-//!     `FieldValue`：Core capabilities for constraining numerical types (zero, unit value, conversion)；
 //!
-//! ## 核心模块 / Core Mods
+//! | Trait | 作用 |
+//! |-------|------|
+//! | [`Collexetable<V>`] | 定义元素提取排序键值 V 的行为 |
+//! | [`FieldValue`] | 约束 V 的数值能力（零值、单位值、数值转换） |
+//! | [`ConstUnit`] | 为类型提供编译期常量单位值 `UNIT` |
 //!
-//! ### 1. `collex`
-//! `FieldCollex<E, V>`：
-//! - 存入 E ，从此 `Collexetable` Trait 的方法得到 V，根据 V 来顺序排序。 E 需要实现 `Collexetable` 来定义得到 V 的方法。
-//!   Store E , and use the method of `Collexetable` Trait to get V, then sort them in order based on V. E needs to impl 'Collexetable' to define the method for getting V.
-//! - 内部有一些特殊的计算，因此 V 需要实现 `FieldValue` 来支持这些计算。整数原语类型已实现。
-//!   There are some special calculations internally, so V needs to impl 'FieldValue' to support these. The integer primitive type has been implemented.
+//! ## 已实现 FieldValue 的类型 / Pre-implemented Types
 //!
-//! ### 2. `set`
-//! `FieldSet<V>`：
-//! - 基于 `collex` 模块封装的简易版本，使 `E = V`，省去了 `Collexetable`
-//!   A simplified version based on the `collex` module, which makes `E=V` to eliminate `Collexetable`
-//! - 但 `FieldValue` 依旧需要
-//!   But `FieldValue` still requires
+//! 所有整数原语类型（`i8`~`i128`, `u8`~`u128`, `isize`, `usize`）及
+//! 对应的 `fraction::Ratio<T>` 均已实现 `FieldValue` 和 `ConstUnit`。
+//! All integer primitives and their `fraction::Ratio<T>` counterparts implement `FieldValue` & `ConstUnit`.
 //!
-//! ## 核心概念 / Core Ideas
+//! ## 设计原理 / Design
 //!
-//! ### 1. `Span`
-//! 依赖 `span_core` 库的 `Span<V>` 类型，定义集合的数值范围：
-//! The 'Span<V>' type, which depends on the 'Span_comore' library, defines the numerical range of the collex:
-//! - 有限区间：`[start, end)`（闭开区间，`start <= v < end` 视为有效）；
-//!   Finite interval: ` [start, end) ` (closed open interval, ` start<=v<end ` is considered valid);
-//! - 无限区间：`[start, +∞)`（闭区间，`start <= v` 视为有效）；
-//!   Infinite interval: ` [start,+∞) ` (closed interval, ` start<=v ` is considered valid);
-//! - 空区间：`start >= end` 的有限区间视为空，无法用于构造集合。
-//!   Empty interval: A finite interval with 'start>=end' is considered empty and cannot be used to construct a collex.
+//! ### 分块槽位 / Block-slot
+//! 以 `unit` 为粒度，将非负数值空间划分为等距槽位，每个槽位可存储 0、1 或多个元素：
+//! Value space is partitioned into equidistant slots (stride = `unit`), each holding 0, 1, or many elements:
 //!
-//! ### 2. 分块思想 / Block-based
-//! 以 `unit`（块大小）为粒度，将 `Span` 划分为多个间隔相同的块，每个块可存储：
-//! Using 'unit' (block size) as the granularity, divide 'Span' into multiple blocks with same size, each of which can store:
-//! - 单个数值（`Field::Elem`）
-//!   Single value (`Field: Elem`)
-//! - 子集合（`Field::Collex`）：块内多个数值时，递归创建子 `FieldCollex` 实现分层存储；
-//!   Subcollex (`Field: Collex`): When there are multiple values in a block, recursively create a sub FieldCollex to achieve hierarchical storage;
-//! - 空（详见 `RawField`）：若某个块为空，会存储前后一个非空块的索引。
-//!   Empty (see `RawField` for details): If a block is empty, the index of the preceding and following non-empty blocks will be stored.
+//! - `Nope` — 空槽，存储 prev/next 非空槽指针，实现 O(1) 链式跳转
+//! - `One(T)` — 单个元素
+//! - `Many(Vec<T>)` — 多个元素，内部以有序 Vec 存储，支持二分查找
 //!
-//! 这些设计使Collex可以通过任何值进行简单计算，O(1)地定位块的位置，从而快捷地进行查询与范围查询。
-//! These designs enable Collex to perform simple calculations using any value,
-//! locate the position of blocks as O(1), to quickly perform getters and range queries.
+//! 通过对任意值做 `value / unit` 即可 O(1) 定位目标槽位，再配合槽内二分查找
+//! 和槽间 prev/next 指针跳转，实现高效的范围查询。
 //!
-//! ### 3. `FieldValue`
-//! 约束数值类型的核心 Trait，需实现以下能力：
-//! The core Trait that constrains numerical types, requires the following capabilities to be implemented:
-//! - 零值(`num_traits::Zero`)/单位值：`zero()`/`min_positive()`；
-//!   zero(`num_traits::Zero`)/unit value
-//! - 数值转换：`into_usize()`/`from_usize()`（块索引计算）；
-//!   conversion: ` into_usize() `/` From_usize() ` (block index calculation);
-//! - 区间计算：`ceil()`（块数量向上取整）。
-//!   Interval calculation: ceil() (rounding up to get number of blocks).
+//! ## 快速开始 / Quick Start
 //!
-//! ## 快速开始 / Let's Go
-//!
-//! ### 引入依赖 / Import
-//! I don't want to say anymore.
-//! ```bash
+//! ```ignore
 //! cargo add field-collex
-//!
 //! ```
 //!
+//! ```ignore
+//! use field_collex::{Collex, Collexetable};
+//!
+//! // 定义自定义元素类型
+//! #[derive(Debug, Clone, PartialEq, Eq)]
+//! struct Item { id: u32, name: String }
+//!
+//! impl Collexetable<u32> for Item {
+//!     fn collexate(&self) -> u32 { self.id }
+//!     fn collexate_ref(&self) -> &u32 { &self.id }
+//!     fn collexate_mut(&mut self) -> &mut u32 { &mut self.id }
+//! }
+//!
+//! let mut c = Collex::<Item, u32>::new();
+//! c.insert(Item { id: 10, name: "a".into() }).unwrap();
+//! c.insert(Item { id: 5,  name: "b".into() }).unwrap();
+//!
+//! assert_eq!(c.first().unwrap().id, 5);
+//! assert_eq!(c.find_ge(&7).unwrap().id, 10);
+//! ```
 
 #![allow(dead_code)]
 
@@ -78,39 +72,102 @@ use num_traits::{NumOps, Zero};
 pub mod collex;
 pub mod set;
 
+pub use collex::Collex;
 pub use set::FieldSet;
-pub use collex::FieldCollex;
-pub use collex::Collexetable;
 
-macro_rules! index_of (
-    ($target: expr) => {
-        $target.sub(*self.span.start()).div(self.unit).into_usize()
-    };
-    ($this: expr, $target: expr) => {
-        $target.sub(*$this.span.start()).div($this.unit).into_usize()
+// ===================== Collexetable =====================
+
+/// 定义元素可被 [`Collex`] 管理的核心行为。
+///
+/// 实现此 trait 的类型可以存入 `Collex<E, V>` 中：
+/// - `collexate()` / `collexate_ref()` — 提取用于排序的键值 V
+/// - `collexate_mut()` — 可变引用（用于 `modify` 系列操作）
+///
+/// 提供了 `collex_cmp` / `collex_eq` 等默认方法用于比较。
+pub trait Collexetable<V> {
+    /// 提取排序键值（所有权）
+    fn collexate(&self) -> V;
+    /// 获取排序键值的不可变引用
+    fn collexate_ref(&self) -> &V;
+    /// 获取排序键值的可变引用
+    fn collexate_mut(&mut self) -> &mut V;
+
+    /// 基于 collexate 值比较两个元素
+    fn collex_cmp<O>(&self, other: &O) -> std::cmp::Ordering
+    where
+        O: Collexetable<V>,
+        V: Ord
+    {
+        self.collexate_ref().cmp(other.collexate_ref())
     }
-);
 
-pub(crate) use index_of;
+    /// 基于 collexate 值判断两元素是否相等
+    fn collex_eq<O>(&self, other: &O) -> bool
+    where
+        O: Collexetable<V>,
+        V: Eq
+    {
+        self.collexate_ref().eq(other.collexate_ref())
+    }
 
+    /// 基于 collexate 值判断可变引用下的两元素是否相等
+    fn collex_mut_eq<O>(&mut self, other: &mut O) -> bool
+    where
+        O: Collexetable<V>,
+        V: Eq
+    {
+        self.collexate_ref().eq(other.collexate_ref())
+    }
+}
+
+// ===================== FieldValue =====================
+
+/// 约束数值类型 V 必须支持的核心能力。
+///
+/// 要求：`Ord + Copy + NumOps + Zero`
+///
+/// `Collex` 内部依赖此 trait 进行槽位索引计算(`into_usize` / `from_usize`)
+/// 和块数量计算(`ceil`)。
 pub trait FieldValue: Ord + Copy + NumOps + Zero {
+    /// 向上取整（用于计算最大槽位数）
     fn ceil(&self) -> Self;
-    fn min_positive() -> Self;
+    /// 转为 usize（用于数组索引）
     fn into_usize(self) -> usize;
+    /// 从 usize 转回
     fn from_usize(value: usize) -> Self;
 }
+
+// ===================== ConstUnit =====================
+
+/// 为类型提供编译期常量单位值。
+///
+/// `Collex::new()` 使用 `V::UNIT` 作为初始槽位宽度。
+/// 对于整数类型，`UNIT = 1`。
+pub trait ConstUnit {
+    /// 编译期单位值常量
+    const UNIT: Self;
+}
+
+// ===================== impl_field_value_for_int =====================
 
 macro_rules! impl_field_value_for_int {
     ($int: ty) => {
         impl FieldValue for $int {
             fn ceil(&self) -> Self { *self }
-            fn min_positive() -> Self { 1 }
             fn into_usize(self) -> usize {
                 self as usize
             }
             fn from_usize(value: usize) -> Self {
                 value as $int
             }
+        }
+    };
+}
+
+macro_rules! impl_const_unit_for_int {
+    ($int: ty) => {
+        impl ConstUnit for $int {
+            const UNIT: Self = 1;
         }
     };
 }
@@ -128,22 +185,33 @@ impl_field_value_for_int!(i32);
 impl_field_value_for_int!(i64);
 impl_field_value_for_int!(i128);
 
+impl_const_unit_for_int!(isize);
+impl_const_unit_for_int!(usize);
+impl_const_unit_for_int!(u8);
+impl_const_unit_for_int!(u16);
+impl_const_unit_for_int!(u32);
+impl_const_unit_for_int!(u64);
+impl_const_unit_for_int!(u128);
+impl_const_unit_for_int!(i8);
+impl_const_unit_for_int!(i16);
+impl_const_unit_for_int!(i32);
+impl_const_unit_for_int!(i64);
+impl_const_unit_for_int!(i128);
+
+// ===================== impl_field_value_for_ratio =====================
+
 macro_rules! impl_field_value_for_ratio {
     ($int: ty) => {
 impl FieldValue for fraction::Ratio<$int>{
     fn ceil(&self) -> Self {
         self.ceil()
     }
-    
-    fn min_positive() -> Self {
-        Self::new(1,<$int>::MAX)
-    }
-    
+
     fn into_usize(self) -> usize {
         let (a,b) = self.into_raw();
         (a/b).into_usize()
     }
-    
+
     fn from_usize(value: usize) -> Self {
         Self::from_integer(value as $int)
     }
@@ -163,270 +231,3 @@ impl_field_value_for_ratio!(i16);
 impl_field_value_for_ratio!(i32);
 impl_field_value_for_ratio!(i64);
 impl_field_value_for_ratio!(i128);
-
-pub(crate) trait FieldItem<V> {
-    fn first(&self) -> &V;
-    fn last(&self) -> &V;
-}
-
-/// 一个块。详见 具体容器类型 。
-///
-/// Thing：本块有元素，存本块索引+值 <br>
-/// Prev ：本块无元素，有前一个非空块，存其索引 <br>
-/// Among：本块无元素，有前与后一个非空块，存其二者索引 <br>
-/// Next ：本块无元素，有后一个非空块，存其索引 <br>
-/// Void ：容器完全无任何元素 <br>
-///
-#[derive(Debug, Clone)]
-pub enum RawField<V, IDX = usize> {
-    Thing((IDX, V)),
-    Prev (IDX),
-    Among(IDX, IDX),
-    Next (IDX),
-    Void,
-}
-
-impl<V> RawField<V> {
-    pub fn is_thing(&self) -> bool {
-        matches!(self, RawField::Thing(_))
-    }
-
-    pub fn as_thing(&self) -> (usize, &V) {
-        match self {
-            Self::Thing(t) => (t.0,&t.1),
-            _ => panic!("Called `RawField::as_thing()` on a not `Thing` value`"),
-        }
-    }
-    
-    pub fn as_thing_mut(&mut self) -> (usize, &mut V) {
-        match self {
-            Self::Thing(t) => (t.0, &mut t.1),
-            _ => panic!("Called `RawField::as_thing_mut()` on a not `Thing` value`"),
-        }
-    }
-    
-    /// 得到Thing内部值
-    ///
-    /// # Panics
-    /// 非Thing时panic
-    pub fn unwrap(self) -> V {
-        match self {
-            Self::Thing(t) => t.1,
-            _ => panic!("Called `RawField::unwrap()` on a not `Thing` value`"),
-        }
-    }
-    
-    pub fn void() -> Self {
-        Self::Void
-    }
-    
-    /// 从Thing制造Prev
-    ///
-    /// # Panics
-    /// 非Thing时Panic
-    pub fn make_prev(&self) -> Self {
-        match self {
-            Self::Thing(t) => Self::Prev(t.0),
-            _ => panic!("Called `RawField::make_prev()` on a not `Thing` value`"),
-        }
-    }
-    
-    /// 从Thing制造Next
-    ///
-    /// # Panics
-    /// 非Thing时Panic
-    pub fn make_next(&self) -> Self {
-        match self {
-            Self::Thing(t) => Self::Next(t.0),
-            _ => panic!("Called `RawField::make_next()` on a not `Thing` value`"),
-        }
-    }
-    
-    pub fn prev_from(tuple: &(usize, V)) -> Self {
-        Self::Prev(tuple.0)
-    }
-    
-    pub fn next_from(tuple: &(usize, V)) -> Self {
-        Self::Next(tuple.0)
-    }
-    
-    
-    /// 得到当前或上一个非空块的索引
-    ///
-    /// 若块不为空，返回自己 <br>
-    /// 若块为空且有前一个非空块，返回该块 <br>
-    /// 若块为空且没有前一个非空块，返回None <br>
-    pub fn thing_prev(&self) -> Option<usize> {
-        match self {
-            RawField::Thing(v) => Some(v.0),
-            RawField::Prev(prev)
-            | RawField::Among(prev,..)
-            => Some(*prev),
-            _ => None,
-        }
-    }
-    
-    
-    /// 得到当前或下一个非空块的索引
-    ///
-    /// 若块不为空，返回自己 <br>
-    /// 若块为空且有后一个非空块，返回该块 <br>
-    /// 若块为空且没有后一个非空块，返回None <br>
-    pub fn thing_next(&self) -> Option<usize> {
-        match self {
-            RawField::Thing(v) => Some(v.0),
-            RawField::Next(next)
-            | RawField::Among(_, next)
-            => Some(*next),
-            _ => None,
-        }
-    }
-    
-    /// RawField的克隆（在Thing未知的情况下）是偏克隆：
-    ///
-    /// 当RawField为Thing变体时返回None，因为Thing不一定支持克隆！
-    ///
-    pub fn partial_clone(&self) -> Option<Self> {
-        match *self {
-            RawField::Thing(_) => None,
-            _ => Some(match *self {
-                RawField::Prev(p) => RawField::Prev(p),
-                RawField::Among(p, n) => RawField::Among(p, n),
-                RawField::Next(n) => RawField::Next(n),
-                RawField::Void => RawField::Void,
-                RawField::Thing(_) => unreachable!(),
-            }),
-        }
-    }
-    
-    /// 调用 partial_clone
-    ///
-    /// # Panics
-    /// 当RawField为Thing变体时panic，因为Thing不一定支持克隆！
-    pub fn unchecked_clone(&self) -> Self {
-        self.partial_clone().expect("Called `RawField::clone` on a `Thing` value")
-    }
-    
-    /// 得到当前或上一个非空块的索引，使用变体区分
-    ///
-    /// 若块不为空，返回Some(Ok) <br>
-    /// 若块为空且有前一个非空块，返回Some(Err) <br>
-    /// 若块为空且没有前一个非空块，返回None <br>
-    pub fn thing_or_prev(&self) -> Option<Result<usize,usize>> {
-        match self {
-            RawField::Thing(v) => Some(Ok(v.0)),
-            RawField::Prev(prev)
-            | RawField::Among(prev,..)
-            => Some(Err(*prev)),
-            _ => None,
-        }
-    }
-    
-    /// 得到当前或下一个非空块的索引，使用变体区分
-    ///
-    /// 若块不为空，返回Some(Ok) <br>
-    /// 若块为空且有后一个非空块，返回Some(Err) <br>
-    /// 若块为空且没有后一个非空块，返回None <br>
-    pub fn thing_or_next(&self) -> Option<Result<usize,usize>> {
-        match self {
-            RawField::Thing(v) => Some(Ok(v.0)),
-            RawField::Next(next)
-            | RawField::Among(_, next)
-            => Some(Err(*next)),
-            _ => None,
-        }
-    }
-    
-}
-
-#[derive(Debug, Clone)]
-pub enum Field<V,C>{
-    Elem(V),
-    Collex(C)
-}
-
-impl<V,C> Field<V,C> {
-    /// 取得作为Elem时的内部值
-    ///
-    /// # Panic
-    /// 非Elem时panic
-    pub fn into_elem(self) -> V {
-        match self{
-            Self::Elem(e) => e,
-            Self::Collex(_) => panic!("Called `Field::into_elem` on a not `Elem` value")
-        }
-    }
-    
-    /// 取得作为Elem时的内部值引用
-    ///
-    /// # Panic
-    /// 非Elem时panic
-    pub fn as_elem(&self) -> &V {
-        match self{
-            Self::Elem(e) => e,
-            Self::Collex(_) => panic!("Called `Field::as_elem` on a not `Elem` value")
-        }
-    }
-    
-    /// 取得作为Collex时的内部值
-    ///
-    /// # Panic
-    /// 非Collex时panic
-    pub fn into_collex(self) -> C {
-        match self{
-            Self::Collex(c) => c,
-            Self::Elem(_) => panic!("Called `Field::into_elem` on a not `Collex` value")
-        }
-    }
-    
-    /// 取得作为Collex时的内部值引用
-    ///
-    /// # Panic
-    /// 非Collex时panic
-    pub fn as_collex(&self) -> &C {
-        match self{
-            Self::Collex(c) => c,
-            Self::Elem(_) => panic!("Called `Field::as_elem` on a not `Collex` value")
-        }
-    }
-    
-    /// 取得作为Collex时的内部值可变引用
-    ///
-    /// # Panic
-    /// 非Collex时panic
-    pub fn as_collex_mut(&mut self) -> &mut C {
-        match self{
-            Self::Collex(c) => c,
-            Self::Elem(_) => panic!("Called `Field::as_elem` on a not `Collex` value")
-        }
-    }
-}
-
-impl<E,V> FieldItem<E> for Field<E,FieldCollex<E,V>>
-where
-    E: Collexetable<V>,
-    V: FieldValue,
-{
-    fn first(&self) -> &E {
-        match self{
-            Field::Elem(e) => {e}
-            Field::Collex(collex) => {
-                // 递归结构是所有权关系，不可能导致死循环。
-                // 只有为空时才会None，而空时不会置为Thing
-                collex.first().unwrap()
-            }
-        }
-    }
-    
-    fn last(&self) -> &E {
-        match self{
-            Field::Elem(e) => {e},
-            Field::Collex(collex) => {
-                // 递归结构是所有权关系，不可能导致死循环。
-                // 只有为空时才会None，而空时不会置为Thing
-                collex.last().unwrap()
-            }
-        }
-    }
-}
-
