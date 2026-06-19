@@ -3,11 +3,13 @@ name = "field-collex"
 version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
-description = "Collections implemented on block-based idea . (Do not ask me why `Field` ;> )"
+description = "A block-slot based ordered collection with O(1) extremum queries."
 repository = "https://github.com/Milk-COCO/field-collex"
 
 [dependencies]
 num-traits = "^0.2"
 fraction = "^0.15"
 serde = { version = "^1.0", features = ["derive"] }
+
+[dev-dependencies]
 serde_json = "^1.0"

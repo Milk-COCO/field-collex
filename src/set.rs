@@ -99,6 +99,7 @@ impl<V: FieldValue + ConstUnit> FieldSet<V> {
     /// ## 返回值
     /// - `Ok(value)` — 删除成功
     /// - `Err(())` — 值不存在
+    #[allow(clippy::result_unit_err)]
     pub fn remove(&mut self, value: V) -> Result<V, ()> {
         self.collex.remove(&value).map(|e| e.0)
     }
@@ -193,6 +194,7 @@ impl<V: FieldValue + ConstUnit> FieldSet<V> {
     /// 尝试修改指定值的元素，失败时自动回滚。
     ///
     /// 参见 [`Collex::try_modify`](crate::Collex::try_modify)。
+    #[allow(clippy::result_unit_err)]
     pub fn try_modify<F, R>(&mut self, value: V, op: F) -> Result<R, ()>
     where
         F: FnOnce(&mut V) -> R

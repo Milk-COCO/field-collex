@@ -138,6 +138,16 @@ where
     }
 }
 
+impl<E, V> Default for Collex<E, V>
+where
+    E: Collexetable<V>,
+    V: FieldValue + ConstUnit,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<E,V> Collex<E,V>
 where
     E: Collexetable<V>,
@@ -189,7 +199,7 @@ where
                     value.eq(v.collexate_ref())
                 }
                 ValueCount::Many(vec) => {
-                    vec.binary_search_by(|e| e.collexate_ref().cmp(&value)).is_ok()
+                    vec.binary_search_by(|e| e.collexate_ref().cmp(value)).is_ok()
                 }
             }
         } else { false }
@@ -371,6 +381,7 @@ where
     /// - `Err(())` — 值不存在或为负数
     ///
     /// 删除后自动维护 prev/next 指针链，`Many` 降为 1 元素时退化为 `One`。
+    #[allow(clippy::result_unit_err)]
     pub fn remove(&mut self, value: &V) -> Result<E, ()> {
         if value.lt(&V::zero()) {
             return Err(());
@@ -717,6 +728,7 @@ where
     /// ## 返回值
     /// - `Ok(result)` — 修改成功
     /// - `Err(())` — 未找到目标元素，或新值插入失败（已回滚）
+    #[allow(clippy::result_unit_err)]
     pub fn try_modify<F, R>(&mut self, value: &V, op: F) -> Result<R, ()>
     where
         F: FnOnce(&mut E) -> R
