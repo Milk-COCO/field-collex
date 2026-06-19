@@ -690,6 +690,87 @@ where
         }
     }
 
+    /// 一次遍历同时查找 `<= value` 和 `> value` 的元素，
+    /// 避免重复的 `idx_of` 和槽位访问。
+    /// 返回 `(prev, next)` 其中 prev 是最后一个 `<= value` 的元素，
+    /// next 是第一个 `> value` 的元素。
+    pub fn find_le_and_gt(&self, value: &V) -> (Option<&E>, Option<&E>) {
+        if value.lt(&V::zero()) {
+            return (None, self.first());
+        }
+
+        let idx = self.idx_of(value);
+
+        if !self.contains_idx(idx) {
+            return (self.last(), None);
+        }
+
+        let slot = &self.items[idx];
+        match &slot.values {
+            ValueCount::Nope => {
+                // 用 match 替代 and_then 闭包，避免每帧上千次闭包分配
+                let prev = match slot.prev {
+                    Some(i) => self.items[i].last(),
+                    None => None,
+                };
+                let next = match slot.next {
+                    Some(i) => self.items[i].first(),
+                    None => None,
+                };
+                (prev, next)
+            }
+            ValueCount::One(v) => {
+                if v.collexate_ref().le(value) {
+                    let next = match slot.next {
+                        Some(i) => self.items[i].first(),
+                        None => None,
+                    };
+                    (Some(v), next)
+                } else {
+                    let prev = match slot.prev {
+                        Some(i) => self.items[i].last(),
+                        None => None,
+                    };
+                    (prev, Some(v))
+                }
+            }
+            ValueCount::Many(vec) => {
+                match vec.binary_search_by(|e| e.collexate_ref().cmp(value)) {
+                    Ok(pos) => {
+                        let next = if pos + 1 < vec.len() {
+                            Some(&vec[pos + 1])
+                        } else {
+                            match slot.next {
+                                Some(i) => self.items[i].first(),
+                                None => None,
+                            }
+                        };
+                        (Some(&vec[pos]), next)
+                    }
+                    Err(pos) => {
+                        let prev = if pos > 0 {
+                            Some(&vec[pos - 1])
+                        } else {
+                            match slot.prev {
+                                Some(i) => self.items[i].last(),
+                                None => None,
+                            }
+                        };
+                        let next = if pos < vec.len() {
+                            Some(&vec[pos])
+                        } else {
+                            match slot.next {
+                                Some(i) => self.items[i].first(),
+                                None => None,
+                            }
+                        };
+                        (prev, next)
+                    }
+                }
+            }
+        }
+    }
+
     /// 修改指定值的元素。
     ///
     /// 闭包可修改元素（包括其 `collexate()` 值）。若 collexate 值改变，
@@ -766,4 +847,118 @@ pub enum ModifyError<R, E> {
     NotFound,
     /// 值改变后插入新位置失败（重复或负数），携带闭包结果和元素
     InsertError(R, E),
+}
+
+// ===================== CollexCursor =====================
+
+/// 游标遍历器，用于单调递增的 beat 时间线下高效查找。
+///
+/// 假设每次调用 `step()` 的 beat 参数**非递减**（时间只前进），
+/// 则游标渐进前移，无需每帧 O(n) 的二分搜索和 idx_of。
+///
+/// 内部存储 `(槽位索引, 槽内子索引)` 追踪当前位置。
+pub struct CollexCursor<'a, E, V>
+where
+    E: Collexetable<V>,
+    V: FieldValue,
+{
+    collex: &'a Collex<E, V>,
+    /// 上次返回的 prev 位置（槽索引, Many槽内的子索引）
+    prev_pos: Option<(usize, usize)>,
+}
+
+impl<'a, E: Collexetable<V>, V: FieldValue> CollexCursor<'a, E, V> {
+    /// 创建新游标，初始位置在第一个元素之前。
+    pub fn new(collex: &'a Collex<E, V>) -> Self {
+        Self { collex, prev_pos: None }
+    }
+
+    /// 从已有的槽位索引恢复游标位置（用于跨帧保存）
+    pub fn from_pos(collex: &'a Collex<E, V>, pos: Option<(usize, usize)>) -> Self {
+        Self { collex, prev_pos: pos }
+    }
+
+    /// 导出当前游标位置，用于跨帧保存
+    pub fn pos(&self) -> Option<(usize, usize)> {
+        self.prev_pos
+    }
+
+    /// 推进游标到 beat，返回 `(prev, next)`：
+    /// - `prev`：最后一个 `collexate() <= beat` 的元素
+    /// - `next`：第一个 `collexate() > beat` 的元素
+    ///
+    /// beat 必须**非递减**（每帧的时间单调递增）。
+    pub fn step(&mut self, beat: &V) -> (Option<&'a E>, Option<&'a E>) {
+        let collex = self.collex; // 重借用，保证返回值绑定 'a 而非 &mut self
+        if beat.lt(&V::zero()) {
+            return (None, collex.first());
+        }
+
+        let (mut slot_idx, mut sub_idx) = match self.prev_pos {
+            Some(pos) => (pos.0, pos.1 + 1),
+            None => match collex.first_nonempty_index() {
+                Some(i) => (i, 0),
+                None => return (None, None),
+            },
+        };
+
+        'outer: loop {
+            if slot_idx >= collex.items.len() {
+                return (collex.last(), None);
+            }
+            let slot = &collex.items[slot_idx];
+            match &slot.values {
+                ValueCount::Nope => {
+                    if let Some(ni) = slot.next {
+                        slot_idx = ni;
+                        sub_idx = 0;
+                        continue 'outer;
+                    }
+                    return (collex.last(), None);
+                }
+                ValueCount::One(v) => {
+                    if v.collexate_ref().le(beat) {
+                        self.prev_pos = Some((slot_idx, 0));
+                        if let Some(ni) = slot.next {
+                            slot_idx = ni;
+                            sub_idx = 0;
+                            continue 'outer;
+                        }
+                        return (Some(v), None);
+                    } else {
+                        let prev = elem_at(collex, self.prev_pos);
+                        return (prev, Some(v));
+                    }
+                }
+                ValueCount::Many(vec) => {
+                    while sub_idx < vec.len() {
+                        let e = &vec[sub_idx];
+                        if e.collexate_ref().le(beat) {
+                            self.prev_pos = Some((slot_idx, sub_idx));
+                            sub_idx += 1;
+                        } else {
+                            let prev = elem_at(collex, self.prev_pos);
+                            return (prev, Some(e));
+                        }
+                    }
+                    if let Some(ni) = slot.next {
+                        slot_idx = ni;
+                        sub_idx = 0;
+                        continue 'outer;
+                    }
+                    return (vec.last(), None);
+                }
+            }
+        }
+    }
+}
+
+fn elem_at<'a, E, V>(collex: &'a Collex<E, V>, pos: Option<(usize, usize)>) -> Option<&'a E>
+where E: Collexetable<V>, V: FieldValue {
+    let (slot_idx, sub_idx) = pos?;
+    Some(match &collex.items[slot_idx].values {
+        ValueCount::One(v) => v,
+        ValueCount::Many(vec) => &vec[sub_idx],
+        ValueCount::Nope => unreachable!(),
+    })
 }
