@@ -231,3 +231,34 @@ impl_field_value_for_ratio!(i16);
 impl_field_value_for_ratio!(i32);
 impl_field_value_for_ratio!(i64);
 impl_field_value_for_ratio!(i128);
+
+// ===================== impl for ordered_float =====================
+
+#[cfg(feature = "ordered-float")]
+macro_rules! impl_field_value_for_ordered_float {
+    ($float: ty) => {
+        impl FieldValue for ordered_float::OrderedFloat<$float> {
+            fn ceil(&self) -> Self {
+                ordered_float::OrderedFloat(self.0.ceil())
+            }
+
+            fn into_usize(self) -> usize {
+                self.0 as usize
+            }
+
+            fn from_usize(value: usize) -> Self {
+                ordered_float::OrderedFloat(value as $float)
+            }
+        }
+
+        impl ConstUnit for ordered_float::OrderedFloat<$float> {
+            const UNIT: Self = ordered_float::OrderedFloat(0.25);
+        }
+    };
+}
+
+#[cfg(feature = "ordered-float")]
+impl_field_value_for_ordered_float!(f32);
+
+#[cfg(feature = "ordered-float")]
+impl_field_value_for_ordered_float!(f64);

@@ -165,6 +165,17 @@ where
         }
     }
 
+
+    /// 构造一个空集合。
+    pub fn with_unit(unit: V) -> Collex<E,V>
+    where V:ConstUnit
+    {
+        Self {
+            unit,
+            items: Vec::new(),
+        }
+    }
+
     /// 返回当前槽位宽度。
     pub fn unit(&self) -> &V {
         &self.unit
@@ -219,7 +230,7 @@ where
 
     /// 获取第一个非空槽位的索引。
     ///
-    /// 若 `items[0]` 为空，则通过其 `next` 指针链定位。
+    // 若 `items[0]` 为空，则通过其 `next` 指针链定位。
     pub(crate) fn first_nonempty_index(&self) -> Option<usize> {
         if self.items.is_empty() { return None; }
 
@@ -232,7 +243,7 @@ where
 
     /// 获取最后一个非空槽位的索引。
     ///
-    /// 若末位槽为空，则通过其 `prev` 指针链定位。
+    // 若末位槽为空，则通过其 `prev` 指针链定位。
     pub(crate) fn last_nonempty_index(&self) -> Option<usize> {
         if self.items.is_empty() { return None; }
 
@@ -250,7 +261,7 @@ where
     /// - `Ok(())` — 插入成功
     /// - `Err(elem)` — 元素已存在或其 `collexate()` 值为负数
     ///
-    /// 插入时自动维护槽内有序性和槽间 prev/next 指针链。
+    // 插入时自动维护槽内有序性和槽间 prev/next 指针链。
     pub fn insert(&mut self, elem: E) -> Result<(),E> {
         let val_ref = elem.collexate_ref();
         if val_ref.lt(&V::zero()) {
@@ -378,9 +389,9 @@ where
     ///
     /// ## 返回值
     /// - `Ok(elem)` — 删除成功，返回被删除的元素
-    /// - `Err(())` — 值不存在或为负数
+    /// - `Err(())` — 值不存在
     ///
-    /// 删除后自动维护 prev/next 指针链，`Many` 降为 1 元素时退化为 `One`。
+    // 删除后自动维护 prev/next 指针链，`Many` 降为 1 元素时退化为 `One`。
     #[allow(clippy::result_unit_err)]
     pub fn remove(&mut self, value: &V) -> Result<E, ()> {
         if value.lt(&V::zero()) {
@@ -771,6 +782,108 @@ where
         }
     }
 
+    /// 单次查询，返回 `(prev, current, next)`：
+    /// - `prev`：最后一个 `collexate() < value` 的元素
+    /// - `current`：`collexate() == value` 的元素
+    /// - `next`：第一个 `collexate() > value` 的元素
+    pub fn find(&self, value: &V) -> (Option<&E>, Option<&E>, Option<&E>) {
+        if value.lt(&V::zero()) {
+            return (None, None, self.first());
+        }
+
+        let idx = self.idx_of(value);
+
+        if !self.contains_idx(idx) {
+            return (self.last(), None, None);
+        }
+
+        let slot = &self.items[idx];
+        match &slot.values {
+            ValueCount::Nope => {
+                let prev = match slot.prev {
+                    Some(i) => self.items[i].last(),
+                    None => None,
+                };
+                let next = match slot.next {
+                    Some(i) => self.items[i].first(),
+                    None => None,
+                };
+                (prev, None, next)
+            }
+            ValueCount::One(v) => {
+                match v.collexate_ref().cmp(value) {
+                    std::cmp::Ordering::Less => {
+                        let next = match slot.next {
+                            Some(i) => self.items[i].first(),
+                            None => None,
+                        };
+                        (Some(v), None, next)
+                    }
+                    std::cmp::Ordering::Equal => {
+                        let prev = match slot.prev {
+                            Some(i) => self.items[i].last(),
+                            None => None,
+                        };
+                        let next = match slot.next {
+                            Some(i) => self.items[i].first(),
+                            None => None,
+                        };
+                        (prev, Some(v), next)
+                    }
+                    std::cmp::Ordering::Greater => {
+                        let prev = match slot.prev {
+                            Some(i) => self.items[i].last(),
+                            None => None,
+                        };
+                        (prev, None, Some(v))
+                    }
+                }
+            }
+            ValueCount::Many(vec) => {
+                match vec.binary_search_by(|e| e.collexate_ref().cmp(value)) {
+                    Ok(pos) => {
+                        let prev = if pos > 0 {
+                            Some(&vec[pos - 1])
+                        } else {
+                            match slot.prev {
+                                Some(i) => self.items[i].last(),
+                                None => None,
+                            }
+                        };
+                        let next = if pos + 1 < vec.len() {
+                            Some(&vec[pos + 1])
+                        } else {
+                            match slot.next {
+                                Some(i) => self.items[i].first(),
+                                None => None,
+                            }
+                        };
+                        (prev, Some(&vec[pos]), next)
+                    }
+                    Err(pos) => {
+                        let prev = if pos > 0 {
+                            Some(&vec[pos - 1])
+                        } else {
+                            match slot.prev {
+                                Some(i) => self.items[i].last(),
+                                None => None,
+                            }
+                        };
+                        let next = if pos < vec.len() {
+                            Some(&vec[pos])
+                        } else {
+                            match slot.next {
+                                Some(i) => self.items[i].first(),
+                                None => None,
+                            }
+                        };
+                        (prev, None, next)
+                    }
+                }
+            }
+        }
+    }
+
     /// 修改指定值的元素。
     ///
     /// 闭包可修改元素（包括其 `collexate()` 值）。若 collexate 值改变，
@@ -808,13 +921,13 @@ where
     ///
     /// ## 返回值
     /// - `Ok(result)` — 修改成功
-    /// - `Err(())` — 未找到目标元素，或新值插入失败（已回滚）
-    #[allow(clippy::result_unit_err)]
-    pub fn try_modify<F, R>(&mut self, value: &V, op: F) -> Result<R, ()>
+    /// - `Err(ModifyError::NotFound)` — 未找到目标元素
+    /// - `Err(ModifyError::InsertError(result, ()))` — 新值插入失败（已回滚）
+    pub fn try_modify<F, R>(&mut self, value: &V, op: F) -> Result<R, ModifyError<R, ()>>
     where
         F: FnOnce(&mut E) -> R
     {
-        let mut elem = self.remove(value).map_err(|_| ())?;
+        let mut elem = self.remove(value).map_err(|_| ModifyError::NotFound)?;
         let old_val = *elem.collexate_ref();
         let result = op(&mut elem);
 
@@ -830,7 +943,7 @@ where
                     // 回滚：恢复旧值，插回原位
                     *rejected.collexate_mut() = old_val;
                     self.insert(rejected).ok();
-                    Err(())
+                    Err(ModifyError::InsertError(result, ()))
                 }
             }
         }
@@ -845,25 +958,30 @@ where
 pub enum ModifyError<R, E> {
     /// 未找到目标元素
     NotFound,
-    /// 值改变后插入新位置失败（重复或负数），携带闭包结果和元素
+    /// 值改变后插入新位置失败（重复或负数），携带闭包结果和修改后的元素
     InsertError(R, E),
 }
 
-// ===================== CollexCursor =====================
-
-/// 游标遍历器，用于单调递增的 beat 时间线下高效查找。
+/// 游标遍历器。
 ///
-/// 假设每次调用 `step()` 的 beat 参数**非递减**（时间只前进），
-/// 则游标渐进前移，无需每帧 O(n) 的二分搜索和 idx_of。
+/// # 为什么？
 ///
-/// 内部存储 `(槽位索引, 槽内子索引)` 追踪当前位置。
+/// ## 为什么存在？
+/// 有时，我们用来查询的数据是单调递增的（比如`当前时间`）。
+/// 游标思想就派上用场了，即在有序序列下，基于上一个请求的位置，基于其往后遍历。
+/// 经常性地，我们目标数据还停留在上一个，或者上一次请求的后一个（因为每帧间隔很短之类的）。
+/// 通常这种情况下如果是使用游标遍历，那将会变成(比Collex查询的平均O(1)更快的)平均O(1)。
+///
+/// ## 为什么是单独的类型？
+/// Collex的内部索引结构和语义都稍稍复杂，并且为了保证数据的Collexate不被外界污染，索引对外不可见。
+/// 通过包装类型封装功能，提供更加便利的游标。
 pub struct CollexCursor<'a, E, V>
 where
     E: Collexetable<V>,
     V: FieldValue,
 {
     collex: &'a Collex<E, V>,
-    /// 上次返回的 prev 位置（槽索引, Many槽内的子索引）
+    /// 上次的位置（槽索引, (如果是Many的话)Many槽内的子索引）
     prev_pos: Option<(usize, usize)>,
 }
 
@@ -883,28 +1001,27 @@ impl<'a, E: Collexetable<V>, V: FieldValue> CollexCursor<'a, E, V> {
         self.prev_pos
     }
 
-    /// 推进游标到 beat，返回 `(prev, next)`：
-    /// - `prev`：最后一个 `collexate() <= beat` 的元素
-    /// - `next`：第一个 `collexate() > beat` 的元素
-    ///
-    /// beat 必须**非递减**（每帧的时间单调递增）。
-    pub fn step(&mut self, beat: &V) -> (Option<&'a E>, Option<&'a E>) {
+    /// 推进游标到 value，返回 `(prev, current, next)`：
+    /// - `prev`：最后一个 `collexate() < value` 的元素
+    /// - `current`：`collexate() == value` 的元素
+    /// - `next`：第一个 `collexate() > value` 的元素
+    pub fn step(&mut self, value: &V) -> (Option<&'a E>, Option<&'a E>, Option<&'a E>) {
         let collex = self.collex; // 重借用，保证返回值绑定 'a 而非 &mut self
-        if beat.lt(&V::zero()) {
-            return (None, collex.first());
+        if value.lt(&V::zero()) {
+            return (None, None, collex.first());
         }
 
         let (mut slot_idx, mut sub_idx) = match self.prev_pos {
             Some(pos) => (pos.0, pos.1 + 1),
             None => match collex.first_nonempty_index() {
                 Some(i) => (i, 0),
-                None => return (None, None),
+                None => return (None, None, None),
             },
         };
 
         'outer: loop {
             if slot_idx >= collex.items.len() {
-                return (collex.last(), None);
+                return (collex.last(), None, None);
             }
             let slot = &collex.items[slot_idx];
             match &slot.values {
@@ -914,31 +1031,59 @@ impl<'a, E: Collexetable<V>, V: FieldValue> CollexCursor<'a, E, V> {
                         sub_idx = 0;
                         continue 'outer;
                     }
-                    return (collex.last(), None);
+                    return (collex.last(), None, None);
                 }
                 ValueCount::One(v) => {
-                    if v.collexate_ref().le(beat) {
-                        self.prev_pos = Some((slot_idx, 0));
-                        if let Some(ni) = slot.next {
-                            slot_idx = ni;
-                            sub_idx = 0;
-                            continue 'outer;
+                    match v.collexate_ref().cmp(value) {
+                        std::cmp::Ordering::Less => {
+                            self.prev_pos = Some((slot_idx, 0));
+                            if let Some(ni) = slot.next {
+                                slot_idx = ni;
+                                sub_idx = 0;
+                                continue 'outer;
+                            }
+                            return (Some(v), None, None);
                         }
-                        return (Some(v), None);
-                    } else {
-                        let prev = elem_at(collex, self.prev_pos);
-                        return (prev, Some(v));
+                        std::cmp::Ordering::Equal => {
+                            let prev = elem_at(collex, self.prev_pos);
+                            self.prev_pos = Some((slot_idx, 0));
+                            let next = match slot.next {
+                                Some(ni) => collex.items[ni].first(),
+                                None => None,
+                            };
+                            return (prev, Some(v), next);
+                        }
+                        std::cmp::Ordering::Greater => {
+                            let prev = elem_at(collex, self.prev_pos);
+                            return (prev, None, Some(v));
+                        }
                     }
                 }
                 ValueCount::Many(vec) => {
                     while sub_idx < vec.len() {
                         let e = &vec[sub_idx];
-                        if e.collexate_ref().le(beat) {
-                            self.prev_pos = Some((slot_idx, sub_idx));
-                            sub_idx += 1;
-                        } else {
-                            let prev = elem_at(collex, self.prev_pos);
-                            return (prev, Some(e));
+                        match e.collexate_ref().cmp(value) {
+                            std::cmp::Ordering::Less => {
+                                self.prev_pos = Some((slot_idx, sub_idx));
+                                sub_idx += 1;
+                            }
+                            std::cmp::Ordering::Equal => {
+                                let prev = elem_at(collex, self.prev_pos);
+                                self.prev_pos = Some((slot_idx, sub_idx));
+                                let next = if sub_idx + 1 < vec.len() {
+                                    Some(&vec[sub_idx + 1])
+                                } else {
+                                    match slot.next {
+                                        Some(ni) => collex.items[ni].first(),
+                                        None => None,
+                                    }
+                                };
+                                return (prev, Some(e), next);
+                            }
+                            std::cmp::Ordering::Greater => {
+                                let prev = elem_at(collex, self.prev_pos);
+                                return (prev, None, Some(e));
+                            }
                         }
                     }
                     if let Some(ni) = slot.next {
@@ -946,14 +1091,14 @@ impl<'a, E: Collexetable<V>, V: FieldValue> CollexCursor<'a, E, V> {
                         sub_idx = 0;
                         continue 'outer;
                     }
-                    return (vec.last(), None);
+                    return (vec.last(), None, None);
                 }
             }
         }
     }
 }
 
-fn elem_at<'a, E, V>(collex: &'a Collex<E, V>, pos: Option<(usize, usize)>) -> Option<&'a E>
+fn elem_at<E, V>(collex: &Collex<E, V>, pos: Option<(usize, usize)>) -> Option<&E>
 where E: Collexetable<V>, V: FieldValue {
     let (slot_idx, sub_idx) = pos?;
     Some(match &collex.items[slot_idx].values {

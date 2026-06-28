@@ -194,8 +194,7 @@ impl<V: FieldValue + ConstUnit> FieldSet<V> {
     /// 尝试修改指定值的元素，失败时自动回滚。
     ///
     /// 参见 [`Collex::try_modify`](crate::Collex::try_modify)。
-    #[allow(clippy::result_unit_err)]
-    pub fn try_modify<F, R>(&mut self, value: V, op: F) -> Result<R, ()>
+    pub fn try_modify<F, R>(&mut self, value: V, op: F) -> Result<R, crate::collex::ModifyError<R, ()>>
     where
         F: FnOnce(&mut V) -> R
     {
