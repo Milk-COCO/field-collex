@@ -786,15 +786,23 @@ where
     /// - `prev`：最后一个 `collexate() < value` 的元素
     /// - `current`：`collexate() == value` 的元素
     /// - `next`：第一个 `collexate() > value` 的元素
-    pub fn find(&self, value: &V) -> (Option<&E>, Option<&E>, Option<&E>) {
+    /// 查找 value 对应的位置，返回 `(prev, current, next, cursor)`：
+    /// - `prev`：最后一个 `collexate() < value` 的元素
+    /// - `current`：`collexate() == value` 的元素
+    /// - `next`：第一个 `collexate() > value` 的元素
+    /// - `cursor`：指向第一个 `>= value` 的元素（current 或 next），不存在则为 None
+    pub fn find(&self, value: &V) -> (Option<&E>, Option<&E>, Option<&E>, Option<CollexCursor>) {
         if value.lt(&V::zero()) {
-            return (None, None, self.first());
+            let first = self.first();
+            let cursor = first.and_then(|_| self.first_nonempty_index())
+                .map(|i| CollexCursor::from_pos((i, 0)));
+            return (None, None, first, cursor);
         }
 
         let idx = self.idx_of(value);
 
         if !self.contains_idx(idx) {
-            return (self.last(), None, None);
+            return (self.last(), None, None, None);
         }
 
         let slot = &self.items[idx];
@@ -808,7 +816,8 @@ where
                     Some(i) => self.items[i].first(),
                     None => None,
                 };
-                (prev, None, next)
+                let cursor = slot.next.map(|i| CollexCursor::from_pos((i, 0)));
+                (prev, None, next, cursor)
             }
             ValueCount::One(v) => {
                 match v.collexate_ref().cmp(value) {
@@ -817,7 +826,8 @@ where
                             Some(i) => self.items[i].first(),
                             None => None,
                         };
-                        (Some(v), None, next)
+                        let cursor = slot.next.map(|i| CollexCursor::from_pos((i, 0)));
+                        (Some(v), None, next, cursor)
                     }
                     std::cmp::Ordering::Equal => {
                         let prev = match slot.prev {
@@ -828,14 +838,14 @@ where
                             Some(i) => self.items[i].first(),
                             None => None,
                         };
-                        (prev, Some(v), next)
+                        (prev, Some(v), next, Some(CollexCursor::from_pos((idx, 0))))
                     }
                     std::cmp::Ordering::Greater => {
                         let prev = match slot.prev {
                             Some(i) => self.items[i].last(),
                             None => None,
                         };
-                        (prev, None, Some(v))
+                        (prev, None, Some(v), Some(CollexCursor::from_pos((idx, 0))))
                     }
                 }
             }
@@ -858,7 +868,7 @@ where
                                 None => None,
                             }
                         };
-                        (prev, Some(&vec[pos]), next)
+                        (prev, Some(&vec[pos]), next, Some(CollexCursor::from_pos((idx, pos))))
                     }
                     Err(pos) => {
                         let prev = if pos > 0 {
@@ -877,7 +887,12 @@ where
                                 None => None,
                             }
                         };
-                        (prev, None, next)
+                        let cursor = if pos < vec.len() {
+                            Some(CollexCursor::from_pos((idx, pos)))
+                        } else {
+                            slot.next.map(|i| CollexCursor::from_pos((i, 0)))
+                        };
+                        (prev, None, next, cursor)
                     }
                 }
             }
@@ -949,6 +964,101 @@ where
         }
     }
 
+    /// 从 cursor 当前位置开始推进游标到 value，返回 `(prev, current, next)`：
+    /// - `prev`：最后一个 `collexate() < value` 的元素
+    /// - `current`：`collexate() == value` 的元素
+    /// - `next`：第一个 `collexate() > value` 的元素
+    pub fn step<'a>(&'a self, cursor: &mut CollexCursor, value: &V) -> (Option<&'a E>, Option<&'a E>, Option<&'a E>) {
+        if value.lt(&V::zero()) {
+            return (None, None, self.first());
+        }
+
+        let (mut slot_idx, mut sub_idx) = if cursor.pos.0 == CollexCursor::UNINIT.0 {
+            match self.first_nonempty_index() {
+                Some(i) => (i, 0),
+                None => return (None, None, None),
+            }
+        } else {
+            cursor.pos
+        };
+
+        'outer: loop {
+            if slot_idx >= self.items.len() {
+                return (self.last(), None, None);
+            }
+            let slot = &self.items[slot_idx];
+            match &slot.values {
+                ValueCount::Nope => {
+                    if let Some(ni) = slot.next {
+                        slot_idx = ni;
+                        sub_idx = 0;
+                        continue 'outer;
+                    }
+                    return (self.last(), None, None);
+                }
+                ValueCount::One(v) => {
+                    match v.collexate_ref().cmp(value) {
+                        std::cmp::Ordering::Less => {
+                            cursor.pos = (slot_idx, 0);
+                            if let Some(ni) = slot.next {
+                                slot_idx = ni;
+                                sub_idx = 0;
+                                continue 'outer;
+                            }
+                            return (Some(v), None, None);
+                        }
+                        std::cmp::Ordering::Equal => {
+                            let prev = elem_at(self, cursor.pos);
+                            cursor.pos = (slot_idx, 0);
+                            let next = match slot.next {
+                                Some(ni) => self.items[ni].first(),
+                                None => None,
+                            };
+                            return (prev, Some(v), next);
+                        }
+                        std::cmp::Ordering::Greater => {
+                            let prev = elem_at(self, cursor.pos);
+                            return (prev, None, Some(v));
+                        }
+                    }
+                }
+                ValueCount::Many(vec) => {
+                    while sub_idx < vec.len() {
+                        let e = &vec[sub_idx];
+                        match e.collexate_ref().cmp(value) {
+                            std::cmp::Ordering::Less => {
+                                cursor.pos = (slot_idx, sub_idx);
+                                sub_idx += 1;
+                            }
+                            std::cmp::Ordering::Equal => {
+                                let prev = elem_at(self, cursor.pos);
+                                cursor.pos = (slot_idx, sub_idx);
+                                let next = if sub_idx + 1 < vec.len() {
+                                    Some(&vec[sub_idx + 1])
+                                } else {
+                                    match slot.next {
+                                        Some(ni) => self.items[ni].first(),
+                                        None => None,
+                                    }
+                                };
+                                return (prev, Some(e), next);
+                            }
+                            std::cmp::Ordering::Greater => {
+                                let prev = elem_at(self, cursor.pos);
+                                return (prev, None, Some(e));
+                            }
+                        }
+                    }
+                    if let Some(ni) = slot.next {
+                        slot_idx = ni;
+                        sub_idx = 0;
+                        continue 'outer;
+                    }
+                    return (vec.last(), None, None);
+                }
+            }
+        }
+    }
 }
 
 // ===================== ModifyError =====================
@@ -975,132 +1085,37 @@ pub enum ModifyError<R, E> {
 /// ## 为什么是单独的类型？
 /// Collex的内部索引结构和语义都稍稍复杂，并且为了保证数据的Collexate不被外界污染，索引对外不可见。
 /// 通过包装类型封装功能，提供更加便利的游标。
-pub struct CollexCursor<'a, E, V>
-where
-    E: Collexetable<V>,
-    V: FieldValue,
-{
-    collex: &'a Collex<E, V>,
+pub struct CollexCursor {
     /// 上次的位置（槽索引, (如果是Many的话)Many槽内的子索引）
-    prev_pos: Option<(usize, usize)>,
+    pos: (usize, usize),
 }
 
-impl<'a, E: Collexetable<V>, V: FieldValue> CollexCursor<'a, E, V> {
+impl CollexCursor {
+    /// 游标未初始化的哨兵值。
+    pub const UNINIT: (usize, usize) = (usize::MAX, usize::MAX);
+
     /// 创建新游标，初始位置在第一个元素之前。
-    pub fn new(collex: &'a Collex<E, V>) -> Self {
-        Self { collex, prev_pos: None }
+    pub fn new() -> Self {
+        Self { pos: Self::UNINIT }
     }
 
     /// 从已有的槽位索引恢复游标位置（用于跨帧保存）
-    pub fn from_pos(collex: &'a Collex<E, V>, pos: Option<(usize, usize)>) -> Self {
-        Self { collex, prev_pos: pos }
+    pub fn from_pos(pos: (usize, usize)) -> Self {
+        Self { pos }
     }
 
     /// 导出当前游标位置，用于跨帧保存
-    pub fn pos(&self) -> Option<(usize, usize)> {
-        self.prev_pos
-    }
-
-    /// 推进游标到 value，返回 `(prev, current, next)`：
-    /// - `prev`：最后一个 `collexate() < value` 的元素
-    /// - `current`：`collexate() == value` 的元素
-    /// - `next`：第一个 `collexate() > value` 的元素
-    pub fn step(&mut self, value: &V) -> (Option<&'a E>, Option<&'a E>, Option<&'a E>) {
-        let collex = self.collex; // 重借用，保证返回值绑定 'a 而非 &mut self
-        if value.lt(&V::zero()) {
-            return (None, None, collex.first());
-        }
-
-        let (mut slot_idx, mut sub_idx) = match self.prev_pos {
-            Some(pos) => (pos.0, pos.1 + 1),
-            None => match collex.first_nonempty_index() {
-                Some(i) => (i, 0),
-                None => return (None, None, None),
-            },
-        };
-
-        'outer: loop {
-            if slot_idx >= collex.items.len() {
-                return (collex.last(), None, None);
-            }
-            let slot = &collex.items[slot_idx];
-            match &slot.values {
-                ValueCount::Nope => {
-                    if let Some(ni) = slot.next {
-                        slot_idx = ni;
-                        sub_idx = 0;
-                        continue 'outer;
-                    }
-                    return (collex.last(), None, None);
-                }
-                ValueCount::One(v) => {
-                    match v.collexate_ref().cmp(value) {
-                        std::cmp::Ordering::Less => {
-                            self.prev_pos = Some((slot_idx, 0));
-                            if let Some(ni) = slot.next {
-                                slot_idx = ni;
-                                sub_idx = 0;
-                                continue 'outer;
-                            }
-                            return (Some(v), None, None);
-                        }
-                        std::cmp::Ordering::Equal => {
-                            let prev = elem_at(collex, self.prev_pos);
-                            self.prev_pos = Some((slot_idx, 0));
-                            let next = match slot.next {
-                                Some(ni) => collex.items[ni].first(),
-                                None => None,
-                            };
-                            return (prev, Some(v), next);
-                        }
-                        std::cmp::Ordering::Greater => {
-                            let prev = elem_at(collex, self.prev_pos);
-                            return (prev, None, Some(v));
-                        }
-                    }
-                }
-                ValueCount::Many(vec) => {
-                    while sub_idx < vec.len() {
-                        let e = &vec[sub_idx];
-                        match e.collexate_ref().cmp(value) {
-                            std::cmp::Ordering::Less => {
-                                self.prev_pos = Some((slot_idx, sub_idx));
-                                sub_idx += 1;
-                            }
-                            std::cmp::Ordering::Equal => {
-                                let prev = elem_at(collex, self.prev_pos);
-                                self.prev_pos = Some((slot_idx, sub_idx));
-                                let next = if sub_idx + 1 < vec.len() {
-                                    Some(&vec[sub_idx + 1])
-                                } else {
-                                    match slot.next {
-                                        Some(ni) => collex.items[ni].first(),
-                                        None => None,
-                                    }
-                                };
-                                return (prev, Some(e), next);
-                            }
-                            std::cmp::Ordering::Greater => {
-                                let prev = elem_at(collex, self.prev_pos);
-                                return (prev, None, Some(e));
-                            }
-                        }
-                    }
-                    if let Some(ni) = slot.next {
-                        slot_idx = ni;
-                        sub_idx = 0;
-                        continue 'outer;
-                    }
-                    return (vec.last(), None, None);
-                }
-            }
-        }
+    pub fn pos(&self) -> (usize, usize) {
+        self.pos
     }
 }
 
-fn elem_at<E, V>(collex: &Collex<E, V>, pos: Option<(usize, usize)>) -> Option<&E>
+fn elem_at<E, V>(collex: &Collex<E, V>, pos: (usize, usize)) -> Option<&E>
 where E: Collexetable<V>, V: FieldValue {
-    let (slot_idx, sub_idx) = pos?;
+    if pos.0 == CollexCursor::UNINIT.0 {
+        return None;
+    }
+    let (slot_idx, sub_idx) = pos;
     Some(match &collex.items[slot_idx].values {
         ValueCount::One(v) => v,
         ValueCount::Many(vec) => &vec[sub_idx],
